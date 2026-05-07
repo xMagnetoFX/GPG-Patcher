@@ -120,7 +120,10 @@ namespace GpgPatcher.Gui
             compatibilityCard.ApplyTheme(palette, summary.IsCompatible);
 
             patchCard.ValueText = summary.IsPatched ? "Patched" : "Not patched";
-            patchCard.DetailText = "Service " + FormatState(summary.ServiceLibPatched) + "  •  Hook " + FormatState(summary.HookDllPresent);
+            patchCard.DetailText = "Service " + FormatState(summary.ServiceLibPatched)
+                + "  •  launch " + FormatState(summary.LaunchSettingsHook)
+                + "  •  viewport " + FormatState(summary.MonitorDisplayHook)
+                + "  •  sharp " + FormatState(summary.SharpeningFilterHook);
             patchCard.ApplyTheme(palette, summary.IsPatched);
 
             backupCard.ValueText = summary.HasBackup ? "Available" : "Missing";

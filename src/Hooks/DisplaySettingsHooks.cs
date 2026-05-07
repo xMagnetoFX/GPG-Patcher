@@ -43,11 +43,6 @@ namespace GpgPatcher.Hooks
 
             AddIfMissing(settings.AvailableDisplaySizes);
 
-            if (!ShouldPromoteSelection(originalSelected, originalMax))
-            {
-                return settings;
-            }
-
             var originalHeight = GetKnownHeight(originalSelected, originalMax);
             var originalDensity = settings.DisplayDensity;
 
@@ -59,6 +54,25 @@ namespace GpgPatcher.Hooks
             }
 
             return settings;
+        }
+
+        public static AndroidDisplaySettings PatchRuntimeAndroidDisplaySettings(
+            AndroidDisplaySettings settings,
+            LaunchGameRequest request)
+        {
+            return PatchAndroidDisplaySettings(settings, request);
+        }
+
+        public static DisplaySize PatchMonitorDisplaySize(
+            DisplaySize displaySize,
+            LaunchGameRequest request)
+        {
+            if (!ShouldPatch(request))
+            {
+                return displaySize;
+            }
+
+            return CreateTargetSize();
         }
 
         private static bool ShouldPatch(LaunchGameRequest request)
@@ -126,26 +140,6 @@ namespace GpgPatcher.Hooks
             }
 
             return max == null ? null : Clone(max);
-        }
-
-        private static bool ShouldPromoteSelection(DisplaySize selected, DisplaySize originalMax)
-        {
-            if (selected == null)
-            {
-                return true;
-            }
-
-            if (IsSameSize(selected, TargetWidth, TargetHeight))
-            {
-                return true;
-            }
-
-            if (originalMax == null)
-            {
-                return true;
-            }
-
-            return CompareByArea(selected, originalMax) >= 0;
         }
 
         private static int GetKnownHeight(DisplaySize selected, DisplaySize originalMax)

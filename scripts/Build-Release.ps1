@@ -25,7 +25,7 @@ if ([string]::IsNullOrWhiteSpace($version)) {
     throw "VersionPrefix was not found in $propsPath."
 }
 
-$solutionPath = Join-Path $repoRoot "GPG-Patcher.slnx"
+$guiProjectPath = Join-Path $repoRoot "src\App\GpgPatcher.Gui.csproj"
 $guiOutputDir = Join-Path $repoRoot "artifacts\app\$Configuration"
 $packageName = "GPG-Patcher-v$version-win-x64"
 $packageDir = Join-Path $OutputRoot $packageName
@@ -60,8 +60,8 @@ function Get-Sha256HashValue {
     return ([System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant())
 }
 
-Write-Host "Building solution..."
-dotnet build $solutionPath -c $Configuration
+Write-Host "Building application..."
+dotnet build $guiProjectPath -c $Configuration
 
 if (Test-Path $packageDir) {
     Remove-Item -LiteralPath $packageDir -Recurse -Force

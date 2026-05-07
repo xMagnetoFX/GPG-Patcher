@@ -38,6 +38,10 @@ namespace GpgPatcher
             var command = args[0].Trim().ToLowerInvariant();
             var enablePhenotypeFallback = args.Skip(1)
                 .Any(argument => string.Equals(argument, "--phenotype-fallback", StringComparison.OrdinalIgnoreCase));
+            var allowOffscreen = args.Skip(1)
+                .Any(argument => string.Equals(argument, "--allow-offscreen", StringComparison.OrdinalIgnoreCase));
+            var allowExperimentalShim = args.Skip(1)
+                .Any(argument => string.Equals(argument, "--experimental", StringComparison.OrdinalIgnoreCase));
 
             switch (command)
             {
@@ -49,6 +53,12 @@ namespace GpgPatcher
                     return 0;
                 case "verify":
                     return Verify(layout);
+                case "force-viewport":
+                case "viewport":
+                    return ForceViewport(allowOffscreen);
+                case "viewport-shim":
+                case "inject-viewport-shim":
+                    return InjectViewportShim(allowExperimentalShim);
                 case "restore":
                     Restore(layout);
                     return 0;
@@ -63,6 +73,10 @@ namespace GpgPatcher
             var launch = LogParser.TryGetLatestLaunch(layout.ServiceLogPath, GpgConstants.TargetPackageName);
             var cap = LogParser.TryGetLatestResolutionCap(layout.ServiceLogPath);
             var androidSerial = LogParser.TryGetLatestAndroidSerialDisplay(layout.AndroidSerialLogPath);
+            var logicalDisplay = LogParser.TryGetLatestLogicalDisplay(
+                layout.AndroidSerialLogPath,
+                launch == null ? null : launch.DisplayId);
+            var hostViewport = LogParser.TryGetLatestHostViewport(GetGpuSyslogPath(layout));
 
             Console.WriteLine("Google Play Games");
             Console.WriteLine("  version: " + patchStatus.InstalledVersion);
@@ -76,6 +90,9 @@ namespace GpgPatcher
             Console.WriteLine("  service lib patched: " + patchStatus.IsPatched);
             Console.WriteLine("  available-settings hook: " + patchStatus.AvailableSettingsPatched);
             Console.WriteLine("  launch-settings hook: " + patchStatus.LaunchSettingsPatched);
+            Console.WriteLine("  monitor-display hook: " + patchStatus.MonitorDisplayPatched);
+            Console.WriteLine("  runtime-display hook: " + patchStatus.RuntimeDisplaySettingsPatched);
+            Console.WriteLine("  sharpening-filter hook: " + patchStatus.SharpeningFilterPatched);
             Console.WriteLine("  hook dll present: " + patchStatus.HookDllPresent);
             Console.WriteLine("  backup present: " + patchStatus.BackupPresent);
             Console.WriteLine("  phenotype override present: " + patchStatus.PhenotypeOverridePresent);
@@ -103,6 +120,8 @@ namespace GpgPatcher
             Console.WriteLine("Latest related caps and guest display");
             Console.WriteLine("  resolution cap: " + (cap == null ? "(not found)" : cap.Cap));
             Console.WriteLine("  android serial display: " + (androidSerial == null ? "(not found)" : androidSerial.DisplaySize.ToString()));
+            Console.WriteLine("  physical display mode: " + FormatLogicalDisplay(logicalDisplay));
+            Console.WriteLine("  host viewport: " + FormatHostViewport(hostViewport));
         }
 
         private static void Patch(PlayGamesInstallLayout layout, bool enablePhenotypeFallback)
@@ -149,6 +168,9 @@ namespace GpgPatcher
                 Console.WriteLine("Patch complete");
                 Console.WriteLine("  available-settings method changed: " + patchResult.AvailableSettingsPatched);
                 Console.WriteLine("  launch-settings method changed: " + patchResult.LaunchSettingsPatched);
+                Console.WriteLine("  monitor-display method changed: " + patchResult.MonitorDisplayPatched);
+                Console.WriteLine("  runtime-display method changed: " + patchResult.RuntimeDisplaySettingsPatched);
+                Console.WriteLine("  sharpening-filter method changed: " + patchResult.SharpeningFilterPatched);
                 Console.WriteLine("  hook dll copied: " + layout.HookTargetPath);
                 Console.WriteLine("  phenotype fallback applied: " + enablePhenotypeFallback);
                 Console.WriteLine();
@@ -175,6 +197,10 @@ namespace GpgPatcher
             var launch = LogParser.TryGetLatestLaunch(layout.ServiceLogPath, GpgConstants.TargetPackageName);
             var cap = LogParser.TryGetLatestResolutionCap(layout.ServiceLogPath);
             var androidSerial = LogParser.TryGetLatestAndroidSerialDisplay(layout.AndroidSerialLogPath);
+            var logicalDisplay = LogParser.TryGetLatestLogicalDisplay(
+                layout.AndroidSerialLogPath,
+                launch == null ? null : launch.DisplayId);
+            var hostViewport = LogParser.TryGetLatestHostViewport(GetGpuSyslogPath(layout));
             var patchStatus = PatchStatusInspector.Inspect(layout);
 
             var expectedDisplaySize = new DisplaySizeSnapshot(GpgConstants.TargetWidth, GpgConstants.TargetHeight);
@@ -196,12 +222,30 @@ namespace GpgPatcher
             Console.WriteLine("  latest launch density: " + (launch == null || !launch.DisplayDensity.HasValue ? "(not found)" : launch.DisplayDensity.Value.ToString()));
             Console.WriteLine("  latest available sizes: " + (launch == null ? "(not found)" : LogParser.FormatDisplaySizes(launch.AvailableDisplaySizes)));
             Console.WriteLine("  latest android serial display: " + (androidSerial == null ? "(not found)" : androidSerial.DisplaySize.ToString()));
+            Console.WriteLine("  latest physical display mode: " + FormatLogicalDisplay(logicalDisplay));
+            Console.WriteLine("  latest host viewport: " + FormatHostViewport(hostViewport));
             Console.WriteLine("  latest resolution cap: " + (cap == null ? "(not found)" : cap.Cap));
+            Console.WriteLine("  managed viewport hooks: monitor "
+                + patchStatus.MonitorDisplayPatched
+                + ", runtime "
+                + patchStatus.RuntimeDisplaySettingsPatched
+                + ", sharpening "
+                + patchStatus.SharpeningFilterPatched);
             Console.WriteLine();
 
             if (launchMatches && serialMatches)
             {
                 Console.WriteLine("PASS: Whiteout Survival is launching with the patched UHD portrait display.");
+                if (!patchStatus.MonitorDisplayPatched || !patchStatus.RuntimeDisplaySettingsPatched)
+                {
+                    Console.WriteLine("WARN: The newer managed viewport hooks are not installed yet; rerun Patch to install the stronger host-display override.");
+                }
+                if (!patchStatus.SharpeningFilterPatched)
+                {
+                    Console.WriteLine("WARN: The sharpening-filter hook is not installed yet; rerun Patch to force Google's own deblur path on.");
+                }
+
+                PrintPresentationWarnings(expectedDisplaySize, logicalDisplay, hostViewport);
                 return 0;
             }
 
@@ -217,6 +261,57 @@ namespace GpgPatcher
             }
 
             return 2;
+        }
+
+        private static int ForceViewport(bool allowOffscreen)
+        {
+            var result = ViewportForcer.ForceTargetViewport(
+                TimeSpan.FromSeconds(15),
+                TimeSpan.FromMilliseconds(750),
+                allowOffscreen);
+
+            Console.WriteLine("Force viewport");
+            Console.WriteLine("  expected viewport: " + GpgConstants.TargetResolutionLabel);
+            Console.WriteLine("  allow offscreen crop: " + allowOffscreen);
+            Console.WriteLine("  crosvm pid: " + result.ProcessId);
+            Console.WriteLine("  window title: " + (string.IsNullOrWhiteSpace(result.WindowTitle) ? "(unknown)" : result.WindowTitle));
+            Console.WriteLine("  parent hwnd: 0x" + result.ParentWindowHandle.ToInt64().ToString("X"));
+            Console.WriteLine("  child hwnd: 0x" + result.ChildWindowHandle.ToInt64().ToString("X"));
+            Console.WriteLine("  attempts: " + result.Attempts);
+            Console.WriteLine("  final child viewport: " + (result.FinalChildSize == null ? "(unknown)" : result.FinalChildSize.ToString()));
+            Console.WriteLine();
+
+            if (result.Success)
+            {
+                Console.WriteLine("PASS: crosvm child viewport is now " + GpgConstants.TargetResolutionLabel + ".");
+                return 0;
+            }
+
+            Console.WriteLine("FAIL: crosvm did not keep the forced viewport size.");
+            return 2;
+        }
+
+        private static int InjectViewportShim(bool allowExperimentalShim)
+        {
+            if (!allowExperimentalShim)
+            {
+                throw new FriendlyException(
+                    "The native viewport shim is disabled because it makes crosvm report 2160x3840 but presents a cropped 1:1 view. Use viewport-shim --experimental only for debugging.");
+            }
+
+            var result = ViewportShimInjector.Inject(AppDomain.CurrentDomain.BaseDirectory);
+
+            Console.WriteLine("Viewport shim");
+            Console.WriteLine("  shim path: " + result.ShimPath);
+            Console.WriteLine("  crosvm pid: " + result.ProcessId);
+            Console.WriteLine("  window title: " + (string.IsNullOrWhiteSpace(result.WindowTitle) ? "(unknown)" : result.WindowTitle));
+            Console.WriteLine("  parent hwnd: 0x" + result.ParentWindowHandle.ToInt64().ToString("X"));
+            Console.WriteLine("  child hwnd: 0x" + result.ChildWindowHandle.ToInt64().ToString("X"));
+            Console.WriteLine("  remote load result: 0x" + result.RemoteModuleHandle.ToInt64().ToString("X"));
+            Console.WriteLine("  visible child size: " + (result.VisibleChildSize == null ? "(unknown)" : result.VisibleChildSize.ToString()));
+            Console.WriteLine();
+            Console.WriteLine("PASS: native viewport shim was injected. Run verify after a few seconds to see whether crosvm accepted the fake 4K viewport.");
+            return 0;
         }
 
         private static void Restore(PlayGamesInstallLayout layout)
@@ -358,6 +453,58 @@ namespace GpgPatcher
             return timestamp.HasValue ? timestamp.Value.ToString("u") : "(unknown)";
         }
 
+        private static string GetGpuSyslogPath(PlayGamesInstallLayout layout)
+        {
+            return Path.Combine(layout.LocalLogsDirectory, "emulator_logs", "gpu_syslog.log");
+        }
+
+        private static string FormatLogicalDisplay(AndroidLogicalDisplayEntry display)
+        {
+            if (display == null)
+            {
+                return "(not found)";
+            }
+
+            return "displayId " + display.DisplayId
+                + ", real " + display.RealDisplaySize
+                + ", app " + display.AppDisplaySize
+                + ", density " + (display.Density.HasValue ? display.Density.Value.ToString() : "(unknown)");
+        }
+
+        private static string FormatHostViewport(HostViewportLogEntry hostViewport)
+        {
+            if (hostViewport == null)
+            {
+                return "(not found)";
+            }
+
+            return "scanout " + hostViewport.ScanoutId + ", " + hostViewport.ViewportSize;
+        }
+
+        private static void PrintPresentationWarnings(
+            DisplaySizeSnapshot expectedDisplaySize,
+            AndroidLogicalDisplayEntry logicalDisplay,
+            HostViewportLogEntry hostViewport)
+        {
+            if (logicalDisplay != null
+                && logicalDisplay.AppDisplaySize != null
+                && (logicalDisplay.AppDisplaySize.Width < expectedDisplaySize.Width
+                    || logicalDisplay.AppDisplaySize.Height < expectedDisplaySize.Height))
+            {
+                Console.WriteLine(
+                    "WARN: Android's physical/app display bounds are smaller than the launch size; Google Play Games may still be compositor-scaling the final image.");
+            }
+
+            if (hostViewport != null
+                && hostViewport.ViewportSize != null
+                && (hostViewport.ViewportSize.Width < expectedDisplaySize.Width
+                    || hostViewport.ViewportSize.Height < expectedDisplaySize.Height))
+            {
+                Console.WriteLine(
+                    "WARN: The visible host viewport is smaller than the Android display size; the final image is being downscaled to the current Play Games window.");
+            }
+        }
+
         private static void PrintUsage()
         {
             Console.WriteLine("GPG Patcher maintenance command host");
@@ -369,6 +516,11 @@ namespace GpgPatcher
             Console.WriteLine("    Back up files, apply the host-side IL patch, optionally force the phenotype override, and restart the Play Games service.");
             Console.WriteLine("  verify");
             Console.WriteLine("    Read the latest logs and confirm whether Whiteout Survival launched at " + GpgConstants.TargetResolutionLabel + ".");
+            Console.WriteLine("  force-viewport");
+            Console.WriteLine("    Resize the visible Whiteout Survival crosvm surface to " + GpgConstants.TargetResolutionLabel + ".");
+            Console.WriteLine("    Add --allow-offscreen to force it even when the monitor is too small and the window will be cropped.");
+            Console.WriteLine("  viewport-shim --experimental");
+            Console.WriteLine("    Debug only: inject the native viewport shim. This can crop the game view and is disabled without --experimental.");
             Console.WriteLine("  restore");
             Console.WriteLine("    Restore original files from backup and restart the Play Games service.");
         }

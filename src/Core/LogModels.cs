@@ -86,6 +86,49 @@ namespace GpgPatcher
         public string RawLine { get; }
     }
 
+    internal sealed class AndroidLogicalDisplayEntry
+    {
+        public AndroidLogicalDisplayEntry(
+            int displayId,
+            DisplaySizeSnapshot realDisplaySize,
+            DisplaySizeSnapshot appDisplaySize,
+            int? density,
+            string rawLine)
+        {
+            DisplayId = displayId;
+            RealDisplaySize = realDisplaySize;
+            AppDisplaySize = appDisplaySize;
+            Density = density;
+            RawLine = rawLine;
+        }
+
+        public int DisplayId { get; }
+
+        public DisplaySizeSnapshot RealDisplaySize { get; }
+
+        public DisplaySizeSnapshot AppDisplaySize { get; }
+
+        public int? Density { get; }
+
+        public string RawLine { get; }
+    }
+
+    internal sealed class HostViewportLogEntry
+    {
+        public HostViewportLogEntry(int scanoutId, DisplaySizeSnapshot viewportSize, string rawLine)
+        {
+            ScanoutId = scanoutId;
+            ViewportSize = viewportSize;
+            RawLine = rawLine;
+        }
+
+        public int ScanoutId { get; }
+
+        public DisplaySizeSnapshot ViewportSize { get; }
+
+        public string RawLine { get; }
+    }
+
     internal sealed class PatchStatus
     {
         public string InstalledVersion { get; set; }
@@ -99,6 +142,12 @@ namespace GpgPatcher
         public bool AvailableSettingsPatched { get; set; }
 
         public bool LaunchSettingsPatched { get; set; }
+
+        public bool MonitorDisplayPatched { get; set; }
+
+        public bool RuntimeDisplaySettingsPatched { get; set; }
+
+        public bool SharpeningFilterPatched { get; set; }
 
         public bool HookAssemblyReferencePresent { get; set; }
 
@@ -116,6 +165,9 @@ namespace GpgPatcher
             {
                 return AvailableSettingsPatched
                     && LaunchSettingsPatched
+                    && MonitorDisplayPatched
+                    && RuntimeDisplaySettingsPatched
+                    && SharpeningFilterPatched
                     && HookAssemblyReferencePresent
                     && HookDllPresent;
             }

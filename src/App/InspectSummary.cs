@@ -30,6 +30,12 @@ namespace GpgPatcher.Gui
 
         public string LaunchSettingsHook { get; set; }
 
+        public string MonitorDisplayHook { get; set; }
+
+        public string RuntimeDisplayHook { get; set; }
+
+        public string SharpeningFilterHook { get; set; }
+
         public string PhenotypeOverridePresent { get; set; }
 
         public bool IsCompatible
@@ -44,7 +50,10 @@ namespace GpgPatcher.Gui
                 return IsTruthy(ServiceLibPatched)
                     && IsTruthy(HookDllPresent)
                     && IsTruthy(AvailableSettingsHook)
-                    && IsTruthy(LaunchSettingsHook);
+                    && IsTruthy(LaunchSettingsHook)
+                    && IsTruthy(MonitorDisplayHook)
+                    && IsTruthy(RuntimeDisplayHook)
+                    && IsTruthy(SharpeningFilterHook);
             }
         }
 
@@ -82,6 +91,9 @@ namespace GpgPatcher.Gui
                 ReadValue(line, "service lib patched:", value => summary.ServiceLibPatched = value);
                 ReadValue(line, "available-settings hook:", value => summary.AvailableSettingsHook = value);
                 ReadValue(line, "launch-settings hook:", value => summary.LaunchSettingsHook = value);
+                ReadValue(line, "monitor-display hook:", value => summary.MonitorDisplayHook = value);
+                ReadValue(line, "runtime-display hook:", value => summary.RuntimeDisplayHook = value);
+                ReadValue(line, "sharpening-filter hook:", value => summary.SharpeningFilterHook = value);
                 ReadValue(line, "hook dll present:", value => summary.HookDllPresent = value);
                 ReadValue(line, "backup present:", value => summary.BackupPresent = value);
                 ReadValue(line, "phenotype override present:", value => summary.PhenotypeOverridePresent = value);

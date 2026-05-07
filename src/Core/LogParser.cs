@@ -43,6 +43,15 @@ namespace GpgPatcher
             new Regex("Display device added: .*? (\\d+) x (\\d+), .*?DeviceProductInfo\\{name=CrosvmDisplay",
                 RegexOptions.Compiled);
 
+        private static readonly Regex AndroidLogicalDisplayRegex =
+            new Regex(
+                "LogicalDisplayMapper: Adding new display:\\s*(\\d+): DisplayInfo\\{.*?real\\s+(\\d+)\\s+x\\s+(\\d+).*?app\\s+(\\d+)\\s+x\\s+(\\d+).*?density\\s+(\\d+)",
+                RegexOptions.Compiled);
+
+        private static readonly Regex HostViewportRegex =
+            new Regex("\\[Scanout\\s+(\\d+)\\]\\s+Updating host viewport size to\\s+(\\d+)x(\\d+)",
+                RegexOptions.Compiled);
+
         public static ServiceLaunchLogEntry TryGetLatestLaunch(string serviceLogPath, string packageName)
         {
             if (!File.Exists(serviceLogPath))
@@ -135,6 +144,72 @@ namespace GpgPatcher
                 {
                     return CreateAndroidSerialDisplayEntry(addedMatch, line);
                 }
+            }
+
+            return null;
+        }
+
+        public static AndroidLogicalDisplayEntry TryGetLatestLogicalDisplay(string androidSerialLogPath, int? displayId)
+        {
+            if (!File.Exists(androidSerialLogPath))
+            {
+                return null;
+            }
+
+            var lines = ReadAllLinesShared(androidSerialLogPath);
+            for (var i = lines.Length - 1; i >= 0; i--)
+            {
+                var line = lines[i];
+                var match = AndroidLogicalDisplayRegex.Match(line);
+                if (!match.Success)
+                {
+                    continue;
+                }
+
+                var currentDisplayId = ParseInt(match.Groups[1].Value);
+                if (displayId.HasValue && currentDisplayId != displayId.Value)
+                {
+                    continue;
+                }
+
+                return new AndroidLogicalDisplayEntry(
+                    currentDisplayId,
+                    new DisplaySizeSnapshot(
+                        ParseInt(match.Groups[2].Value),
+                        ParseInt(match.Groups[3].Value)),
+                    new DisplaySizeSnapshot(
+                        ParseInt(match.Groups[4].Value),
+                        ParseInt(match.Groups[5].Value)),
+                    ParseInt(match.Groups[6].Value),
+                    line);
+            }
+
+            return null;
+        }
+
+        public static HostViewportLogEntry TryGetLatestHostViewport(string gpuSyslogPath)
+        {
+            if (!File.Exists(gpuSyslogPath))
+            {
+                return null;
+            }
+
+            var lines = ReadAllLinesShared(gpuSyslogPath);
+            for (var i = lines.Length - 1; i >= 0; i--)
+            {
+                var line = lines[i];
+                var match = HostViewportRegex.Match(line);
+                if (!match.Success)
+                {
+                    continue;
+                }
+
+                return new HostViewportLogEntry(
+                    ParseInt(match.Groups[1].Value),
+                    new DisplaySizeSnapshot(
+                        ParseInt(match.Groups[2].Value),
+                        ParseInt(match.Groups[3].Value)),
+                    line);
             }
 
             return null;

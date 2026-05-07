@@ -40,6 +40,10 @@ namespace GpgPatcher
                     var serviceType = module.Types.First(type => type.FullName == GpgConstants.ServiceTypeName);
                     var availableMethod = ServiceLibPatcher.FindTargetMethod(serviceType, GpgConstants.AvailableSettingsMethodName);
                     var launchMethod = ServiceLibPatcher.FindTargetMethod(serviceType, GpgConstants.LaunchSettingsMethodName);
+                    var monitorDisplayMethod = ServiceLibPatcher.FindMonitorDisplayMethod(serviceType, GpgConstants.MonitorDisplayMethodName);
+                    var runtimeDisplayMethod = ServiceLibPatcher.FindRuntimeDisplaySettingsMethod(serviceType, GpgConstants.RuntimeDisplaySettingsMethodName);
+                    var sharpeningGetter = ServiceLibPatcher.FindSharpeningFilterGetter(module);
+                    var sharpeningRequestMethod = ServiceLibPatcher.FindSharpeningFilterRequestMethod(module);
 
                     patchStatus.AvailableSettingsPatched = ServiceLibPatcher.HasAnyHookCall(
                         availableMethod,
@@ -47,6 +51,15 @@ namespace GpgPatcher
                     patchStatus.LaunchSettingsPatched = ServiceLibPatcher.HasAnyHookCall(
                         launchMethod,
                         GpgConstants.PatchAndroidDisplaySettingsMethod);
+                    patchStatus.MonitorDisplayPatched = ServiceLibPatcher.HasHookCall(
+                        monitorDisplayMethod,
+                        GpgConstants.PatchMonitorDisplaySizeMethod);
+                    patchStatus.RuntimeDisplaySettingsPatched = ServiceLibPatcher.HasHookCall(
+                        runtimeDisplayMethod,
+                        GpgConstants.PatchRuntimeAndroidDisplaySettingsMethod);
+                    patchStatus.SharpeningFilterPatched =
+                        ServiceLibPatcher.IsConstantTrueMethod(sharpeningGetter)
+                        && ServiceLibPatcher.HasForcedSharpeningFilterRequest(sharpeningRequestMethod);
                 }
 
                 patchStatus.HookAssemblyReferencePresent = module.GetAssemblyRefs()
@@ -98,8 +111,49 @@ namespace GpgPatcher
                 return;
             }
 
+            MethodDef monitorDisplayMethod;
+            try
+            {
+                monitorDisplayMethod = ServiceLibPatcher.FindMonitorDisplayMethod(serviceType, GpgConstants.MonitorDisplayMethodName);
+            }
+            catch (FriendlyException ex)
+            {
+                patchStatus.IsCompatible = false;
+                patchStatus.CompatibilityState = "MonitorDisplayIncompatible";
+                patchStatus.CompatibilityMessage = ex.Message;
+                return;
+            }
+
+            MethodDef runtimeDisplayMethod;
+            try
+            {
+                runtimeDisplayMethod = ServiceLibPatcher.FindRuntimeDisplaySettingsMethod(serviceType, GpgConstants.RuntimeDisplaySettingsMethodName);
+            }
+            catch (FriendlyException ex)
+            {
+                patchStatus.IsCompatible = false;
+                patchStatus.CompatibilityState = "RuntimeDisplaySettingsIncompatible";
+                patchStatus.CompatibilityMessage = ex.Message;
+                return;
+            }
+
+            try
+            {
+                ServiceLibPatcher.FindSharpeningFilterGetter(module);
+                ServiceLibPatcher.FindSharpeningFilterRequestMethod(module);
+            }
+            catch (FriendlyException ex)
+            {
+                patchStatus.IsCompatible = false;
+                patchStatus.CompatibilityState = "SharpeningFilterIncompatible";
+                patchStatus.CompatibilityMessage = ex.Message;
+                return;
+            }
+
             if (ServiceLibPatcher.HasLegacyHookCall(availableMethod, GpgConstants.PatchAvailableSettingsMethod)
-                || ServiceLibPatcher.HasLegacyHookCall(launchMethod, GpgConstants.PatchAndroidDisplaySettingsMethod))
+                || ServiceLibPatcher.HasLegacyHookCall(launchMethod, GpgConstants.PatchAndroidDisplaySettingsMethod)
+                || ServiceLibPatcher.HasLegacyHookCall(monitorDisplayMethod, GpgConstants.PatchMonitorDisplaySizeMethod)
+                || ServiceLibPatcher.HasLegacyHookCall(runtimeDisplayMethod, GpgConstants.PatchRuntimeAndroidDisplaySettingsMethod))
             {
                 patchStatus.IsCompatible = false;
                 patchStatus.CompatibilityState = "LegacyPatchDetected";
