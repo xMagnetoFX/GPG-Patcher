@@ -16,6 +16,8 @@ namespace GpgPatcher.Gui
 
         public string HookDllPresent { get; set; }
 
+        public string HookDllCompatible { get; set; }
+
         public string BackupPresent { get; set; }
 
         public string Density { get; set; }
@@ -36,6 +38,10 @@ namespace GpgPatcher.Gui
 
         public string SharpeningFilterHook { get; set; }
 
+        public string AccountLimitBypassHook { get; set; }
+
+        public string AddAccountDeepLinkHook { get; set; }
+
         public string PhenotypeOverridePresent { get; set; }
 
         public bool IsCompatible
@@ -53,7 +59,10 @@ namespace GpgPatcher.Gui
                     && IsTruthy(LaunchSettingsHook)
                     && IsTruthy(MonitorDisplayHook)
                     && IsTruthy(RuntimeDisplayHook)
-                    && IsTruthy(SharpeningFilterHook);
+                    && IsTruthy(SharpeningFilterHook)
+                    && IsTruthy(AccountLimitBypassHook)
+                    && IsTruthy(AddAccountDeepLinkHook)
+                    && IsTruthy(HookDllCompatible);
             }
         }
 
@@ -94,7 +103,10 @@ namespace GpgPatcher.Gui
                 ReadValue(line, "monitor-display hook:", value => summary.MonitorDisplayHook = value);
                 ReadValue(line, "runtime-display hook:", value => summary.RuntimeDisplayHook = value);
                 ReadValue(line, "sharpening-filter hook:", value => summary.SharpeningFilterHook = value);
+                ReadValue(line, "account-limit bypass hook:", value => summary.AccountLimitBypassHook = value);
+                ReadValue(line, "add-account deep-link hook:", value => summary.AddAccountDeepLinkHook = value);
                 ReadValue(line, "hook dll present:", value => summary.HookDllPresent = value);
+                ReadValue(line, "hook dll compatible:", value => summary.HookDllCompatible = value);
                 ReadValue(line, "backup present:", value => summary.BackupPresent = value);
                 ReadValue(line, "phenotype override present:", value => summary.PhenotypeOverridePresent = value);
                 ReadValue(line, "density:", value => summary.Density = value);

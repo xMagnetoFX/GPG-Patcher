@@ -10,6 +10,7 @@ namespace GpgPatcher.Hooks
         public const string TargetPackageName = "com.gof.global";
         public const int TargetWidth = 2160;
         public const int TargetHeight = 3840;
+        public const int AccountLimitBypassVisibleCount = 4;
 
         public static AndroidDisplay.AvailableSettings PatchAvailableSettings(
             AndroidDisplay.AvailableSettings settings,
@@ -73,6 +74,11 @@ namespace GpgPatcher.Hooks
             }
 
             return CreateTargetSize();
+        }
+
+        public static int PatchOnboardedAccountCount(int count)
+        {
+            return count >= 5 ? AccountLimitBypassVisibleCount : count;
         }
 
         private static bool ShouldPatch(LaunchGameRequest request)

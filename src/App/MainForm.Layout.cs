@@ -142,11 +142,13 @@ namespace GpgPatcher.Gui
             actionLayout.Controls.Add(buttonPanel, 0, 0);
 
             patchButton = CreateButton("Patch", ModernButtonTone.Primary, async (sender, args) => await PatchAsync());
+            addAccountButton = CreateButton("Add Account", ModernButtonTone.Secondary, async (sender, args) => await AddAccountAsync());
             refreshButton = CreateButton("Refresh", ModernButtonTone.Secondary, async (sender, args) => await RefreshInspectAsync());
             verifyButton = CreateButton("Verify", ModernButtonTone.Secondary, async (sender, args) => await VerifyAsync());
             restoreButton = CreateButton("Restore", ModernButtonTone.Danger, async (sender, args) => await RestoreAsync());
 
             buttonPanel.Controls.Add(patchButton);
+            buttonPanel.Controls.Add(addAccountButton);
             buttonPanel.Controls.Add(refreshButton);
             buttonPanel.Controls.Add(verifyButton);
             buttonPanel.Controls.Add(restoreButton);

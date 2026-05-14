@@ -19,6 +19,10 @@ namespace GpgPatcher
 
         public bool SharpeningFilterPatched { get; set; }
 
+        public bool AccountLimitBypassPatched { get; set; }
+
+        public bool AddAccountDeepLinkPatched { get; set; }
+
         public bool AlreadyPatched
         {
             get
@@ -27,13 +31,24 @@ namespace GpgPatcher
                     && !LaunchSettingsPatched
                     && !MonitorDisplayPatched
                     && !RuntimeDisplaySettingsPatched
-                    && !SharpeningFilterPatched;
+                    && !SharpeningFilterPatched
+                    && !AccountLimitBypassPatched
+                    && !AddAccountDeepLinkPatched;
             }
         }
     }
 
     internal static class ServiceLibPatcher
     {
+        public sealed class AccountLimitBypassMethods
+        {
+            public MethodDef LocalStateUpdateAccountsInfo { get; set; }
+
+            public MethodDef AccountsInfoUpdaterMoveNext { get; set; }
+
+            public MethodDef GlobalStateSetOnboardedAccounts { get; set; }
+        }
+
         public static ServiceLibPatchResult Patch(string serviceLibPath, string outputPath)
         {
             using (var module = ModuleDefMD.Load(serviceLibPath))
@@ -50,6 +65,8 @@ namespace GpgPatcher
                 var runtimeDisplayMethod = FindRuntimeDisplaySettingsMethod(serviceType, GpgConstants.RuntimeDisplaySettingsMethodName);
                 var sharpeningGetter = FindSharpeningFilterGetter(module);
                 var sharpeningRequestMethod = FindSharpeningFilterRequestMethod(module);
+                var accountLimitMethods = FindAccountLimitBypassMethods(module);
+                var openDeepLinkMethod = FindOpenDeepLinkMethod(module);
 
                 var result = new ServiceLibPatchResult
                 {
@@ -69,6 +86,8 @@ namespace GpgPatcher
                         module,
                         sharpeningGetter,
                         sharpeningRequestMethod),
+                    AccountLimitBypassPatched = PatchAccountLimitBypass(module, accountLimitMethods),
+                    AddAccountDeepLinkPatched = PatchAddAccountDeepLink(module, openDeepLinkMethod),
                 };
 
                 var options = new ModuleWriterOptions(module)
@@ -209,6 +228,74 @@ namespace GpgPatcher
             }
 
             return method;
+        }
+
+        public static AccountLimitBypassMethods FindAccountLimitBypassMethods(ModuleDef module)
+        {
+            return new AccountLimitBypassMethods
+            {
+                LocalStateUpdateAccountsInfo = FindLocalStateUpdateAccountsInfoMethod(module),
+                AccountsInfoUpdaterMoveNext = FindMethod(
+                    module,
+                    GpgConstants.AccountsInfoUpdaterMoveNextTypeName,
+                    GpgConstants.MoveNextMethodName,
+                    "System.Void",
+                    new string[0]),
+                GlobalStateSetOnboardedAccounts = FindMethod(
+                    module,
+                    GpgConstants.GlobalStateAccountCountMutatorTypeName,
+                    GpgConstants.GlobalStateSetOnboardedAccountsMethodName,
+                    "System.Boolean",
+                    new[] { "Google.Play.Games.Metrics.GlobalState" }),
+            };
+        }
+
+        public static bool HasAccountLimitBypass(AccountLimitBypassMethods methods)
+        {
+            return methods != null
+                && HasHookCall(methods.LocalStateUpdateAccountsInfo, GpgConstants.PatchOnboardedAccountCountMethod)
+                && HasHookCall(methods.AccountsInfoUpdaterMoveNext, GpgConstants.PatchOnboardedAccountCountMethod)
+                && HasHookCall(methods.GlobalStateSetOnboardedAccounts, GpgConstants.PatchOnboardedAccountCountMethod);
+        }
+
+        public static MethodDef FindOpenDeepLinkMethod(ModuleDef module)
+        {
+            return FindMethod(
+                module,
+                GpgConstants.ClientControllerTypeName,
+                GpgConstants.OpenDeepLinkMethodName,
+                "System.Threading.Tasks.Task",
+                new[] { "System.String" });
+        }
+
+        public static bool HasAddAccountDeepLink(MethodDef method)
+        {
+            if (method == null || method.Body == null)
+            {
+                return false;
+            }
+
+            var sawProtocol = false;
+            var sawAddAccountCall = false;
+            foreach (var instruction in method.Body.Instructions)
+            {
+                if (instruction.OpCode == OpCodes.Ldstr
+                    && string.Equals(instruction.Operand as string, GpgConstants.AddAccountProtocolUrl, StringComparison.Ordinal))
+                {
+                    sawProtocol = true;
+                    continue;
+                }
+
+                var methodOperand = instruction.Operand as IMethod;
+                if ((instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt)
+                    && methodOperand != null
+                    && string.Equals(methodOperand.Name, GpgConstants.AddAccountMethodName, StringComparison.Ordinal))
+                {
+                    sawAddAccountCall = true;
+                }
+            }
+
+            return sawProtocol && sawAddAccountCall;
         }
 
         public static bool HasAnyHookCall(MethodDef method, string hookMethodName)
@@ -477,6 +564,104 @@ namespace GpgPatcher
             return changed;
         }
 
+        private static bool PatchAccountLimitBypass(ModuleDef module, AccountLimitBypassMethods methods)
+        {
+            var changed = false;
+            changed |= PatchOnboardedAccountCountSetter(
+                module,
+                methods.LocalStateUpdateAccountsInfo,
+                GpgConstants.AccountsInfoTypeName,
+                "set_OnboardedAccounts",
+                "set_NumOnboardedAccounts");
+            changed |= PatchOnboardedAccountCountSetter(
+                module,
+                methods.AccountsInfoUpdaterMoveNext,
+                GpgConstants.AccountsInfoTypeName,
+                "set_OnboardedAccounts",
+                "set_NumOnboardedAccounts");
+            changed |= PatchOnboardedAccountCountSetter(
+                module,
+                methods.GlobalStateSetOnboardedAccounts,
+                GpgConstants.GlobalStateTypeName,
+                "set_OnboardedAccounts");
+
+            return changed;
+        }
+
+        private static bool PatchAddAccountDeepLink(ModuleDef module, MethodDef openDeepLinkMethod)
+        {
+            if (HasAddAccountDeepLink(openDeepLinkMethod))
+            {
+                return false;
+            }
+
+            var addAccountMethod = FindMethod(
+                module,
+                GpgConstants.ClientControllerTypeName,
+                GpgConstants.AddAccountMethodName,
+                "System.Threading.Tasks.Task",
+                new string[0]);
+
+            var body = openDeepLinkMethod.Body;
+            var firstOriginal = body.Instructions.First();
+            var stringEquals = new MemberRefUser(
+                module,
+                "op_Equality",
+                MethodSig.CreateStatic(
+                    module.CorLibTypes.Boolean,
+                    module.CorLibTypes.String,
+                    module.CorLibTypes.String),
+                module.CorLibTypes.String.ToTypeDefOrRef());
+
+            body.Instructions.Insert(0, Instruction.Create(OpCodes.Ldarg_1));
+            body.Instructions.Insert(1, Instruction.Create(OpCodes.Ldstr, GpgConstants.AddAccountProtocolUrl));
+            body.Instructions.Insert(2, Instruction.Create(OpCodes.Call, stringEquals));
+            body.Instructions.Insert(3, Instruction.Create(OpCodes.Brfalse_S, firstOriginal));
+            body.Instructions.Insert(4, Instruction.Create(OpCodes.Ldarg_0));
+            body.Instructions.Insert(5, Instruction.Create(OpCodes.Call, addAccountMethod));
+            body.Instructions.Insert(6, Instruction.Create(OpCodes.Ret));
+            body.MaxStack = (ushort)Math.Max((int)body.MaxStack, 2);
+            return true;
+        }
+
+        private static bool PatchOnboardedAccountCountSetter(
+            ModuleDef module,
+            MethodDef method,
+            string declaringTypeName,
+            params string[] setterNames)
+        {
+            if (HasHookCall(method, GpgConstants.PatchOnboardedAccountCountMethod))
+            {
+                return false;
+            }
+
+            var hookMethod = CreateHookMethodReference(
+                module,
+                GpgConstants.PatchOnboardedAccountCountMethod,
+                module.CorLibTypes.Int32,
+                module.CorLibTypes.Int32);
+
+            var body = method.Body;
+            for (var index = 0; index < body.Instructions.Count; index++)
+            {
+                var instruction = body.Instructions[index];
+                var calledMethod = instruction.Operand as IMethod;
+                if ((instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt)
+                    && calledMethod != null
+                    && setterNames.Any(setterName => string.Equals(calledMethod.Name, setterName, StringComparison.Ordinal))
+                    && calledMethod.DeclaringType != null
+                    && string.Equals(calledMethod.DeclaringType.FullName, declaringTypeName, StringComparison.Ordinal))
+                {
+                    body.Instructions.Insert(index, Instruction.Create(OpCodes.Call, hookMethod));
+                    body.MaxStack = (ushort)Math.Max((int)body.MaxStack, 8);
+                    return true;
+                }
+            }
+
+            throw new FriendlyException(
+                "Could not find " + declaringTypeName + " account-count setter call in method '" + method.FullName + "'.");
+        }
+
         private static FieldDef FindLaunchGameRequestField(TypeDef serviceType)
         {
             var field = serviceType.Fields.FirstOrDefault(candidate =>
@@ -489,6 +674,77 @@ namespace GpgPatcher
             }
 
             return field;
+        }
+
+        private static MethodDef FindLocalStateUpdateAccountsInfoMethod(ModuleDef module)
+        {
+            try
+            {
+                return FindMethod(
+                    module,
+                    GpgConstants.LocalStateModuleTypeName,
+                    GpgConstants.UpdateAccountsInfoMethodName,
+                    "Google.Hpe.Client.V1.AccountsInfo",
+                    new string[0]);
+            }
+            catch (FriendlyException oldShapeException)
+            {
+                try
+                {
+                    return FindMethod(
+                        module,
+                        GpgConstants.LocalStateModuleTypeName,
+                        GpgConstants.UpdateAccountsInfoMethodName,
+                        "System.Boolean",
+                        new[]
+                        {
+                            "Google.Hpe.Client.V1.LocalState",
+                            "Google.Hpe.Service.Accounts.AccountsState",
+                        });
+                }
+                catch (FriendlyException newShapeException)
+                {
+                    throw new FriendlyException(
+                        oldShapeException.Message + " " + newShapeException.Message);
+                }
+            }
+        }
+
+        private static MethodDef FindMethod(
+            ModuleDef module,
+            string typeName,
+            string methodName,
+            string returnTypeName,
+            IReadOnlyList<string> parameterTypeNames)
+        {
+            var type = module.GetTypes().FirstOrDefault(candidate =>
+                string.Equals(candidate.FullName, typeName, StringComparison.Ordinal));
+
+            if (type == null)
+            {
+                throw new FriendlyException("Could not find " + typeName + " in ServiceLib.dll.");
+            }
+
+            var method = type.Methods.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, methodName, StringComparison.Ordinal)
+                && candidate.MethodSig != null
+                && candidate.ReturnType.FullName == returnTypeName
+                && candidate.MethodSig.Params.Count == parameterTypeNames.Count
+                && candidate.MethodSig.Params
+                    .Select(parameter => parameter.FullName)
+                    .SequenceEqual(parameterTypeNames));
+
+            if (method == null)
+            {
+                throw new FriendlyException("Could not find target method '" + methodName + "' in " + typeName + ".");
+            }
+
+            if (method.Body == null)
+            {
+                throw new FriendlyException("Target method '" + methodName + "' has no IL body.");
+            }
+
+            return method;
         }
 
         private static MemberRef CreateHookMethodReference(ModuleDef module, MethodDef targetMethod, string hookMethodName)

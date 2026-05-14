@@ -149,9 +149,15 @@ namespace GpgPatcher
 
         public bool SharpeningFilterPatched { get; set; }
 
+        public bool AccountLimitBypassPatched { get; set; }
+
+        public bool AddAccountDeepLinkPatched { get; set; }
+
         public bool HookAssemblyReferencePresent { get; set; }
 
         public bool HookDllPresent { get; set; }
+
+        public bool HookDllCompatible { get; set; }
 
         public bool BackupPresent { get; set; }
 
@@ -168,8 +174,11 @@ namespace GpgPatcher
                     && MonitorDisplayPatched
                     && RuntimeDisplaySettingsPatched
                     && SharpeningFilterPatched
+                    && AccountLimitBypassPatched
+                    && AddAccountDeepLinkPatched
                     && HookAssemblyReferencePresent
-                    && HookDllPresent;
+                    && HookDllPresent
+                    && HookDllCompatible;
             }
         }
     }

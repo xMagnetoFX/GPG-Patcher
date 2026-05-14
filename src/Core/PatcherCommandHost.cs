@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Principal;
@@ -53,6 +54,8 @@ namespace GpgPatcher
                     return 0;
                 case "verify":
                     return Verify(layout);
+                case "add-account":
+                    return AddAccount(layout);
                 case "force-viewport":
                 case "viewport":
                     return ForceViewport(allowOffscreen);
@@ -93,7 +96,10 @@ namespace GpgPatcher
             Console.WriteLine("  monitor-display hook: " + patchStatus.MonitorDisplayPatched);
             Console.WriteLine("  runtime-display hook: " + patchStatus.RuntimeDisplaySettingsPatched);
             Console.WriteLine("  sharpening-filter hook: " + patchStatus.SharpeningFilterPatched);
+            Console.WriteLine("  account-limit bypass hook: " + patchStatus.AccountLimitBypassPatched);
+            Console.WriteLine("  add-account deep-link hook: " + patchStatus.AddAccountDeepLinkPatched);
             Console.WriteLine("  hook dll present: " + patchStatus.HookDllPresent);
+            Console.WriteLine("  hook dll compatible: " + patchStatus.HookDllCompatible);
             Console.WriteLine("  backup present: " + patchStatus.BackupPresent);
             Console.WriteLine("  phenotype override present: " + patchStatus.PhenotypeOverridePresent);
             if (patchStatus.PhenotypeOverridePresent && !string.IsNullOrWhiteSpace(patchStatus.PhenotypeOverrideValue))
@@ -171,6 +177,8 @@ namespace GpgPatcher
                 Console.WriteLine("  monitor-display method changed: " + patchResult.MonitorDisplayPatched);
                 Console.WriteLine("  runtime-display method changed: " + patchResult.RuntimeDisplaySettingsPatched);
                 Console.WriteLine("  sharpening-filter method changed: " + patchResult.SharpeningFilterPatched);
+                Console.WriteLine("  account-limit bypass changed: " + patchResult.AccountLimitBypassPatched);
+                Console.WriteLine("  add-account deep-link changed: " + patchResult.AddAccountDeepLinkPatched);
                 Console.WriteLine("  hook dll copied: " + layout.HookTargetPath);
                 Console.WriteLine("  phenotype fallback applied: " + enablePhenotypeFallback);
                 Console.WriteLine();
@@ -230,7 +238,11 @@ namespace GpgPatcher
                 + ", runtime "
                 + patchStatus.RuntimeDisplaySettingsPatched
                 + ", sharpening "
-                + patchStatus.SharpeningFilterPatched);
+                + patchStatus.SharpeningFilterPatched
+                + ", accounts "
+                + patchStatus.AccountLimitBypassPatched
+                + ", add-account "
+                + patchStatus.AddAccountDeepLinkPatched);
             Console.WriteLine();
 
             if (launchMatches && serialMatches)
@@ -243,6 +255,18 @@ namespace GpgPatcher
                 if (!patchStatus.SharpeningFilterPatched)
                 {
                     Console.WriteLine("WARN: The sharpening-filter hook is not installed yet; rerun Patch to force Google's own deblur path on.");
+                }
+                if (!patchStatus.AccountLimitBypassPatched)
+                {
+                    Console.WriteLine("WARN: The account-count bypass hook is not installed yet; rerun Patch before using more than 5 accounts.");
+                }
+                if (!patchStatus.AddAccountDeepLinkPatched)
+                {
+                    Console.WriteLine("WARN: The add-account deep-link hook is not installed yet; rerun Patch before using the Add Account button.");
+                }
+                if (!patchStatus.HookDllCompatible)
+                {
+                    Console.WriteLine("WARN: The installed hook DLL is stale or incompatible; rerun Patch to copy the current hook DLL.");
                 }
 
                 PrintPresentationWarnings(expectedDisplaySize, logicalDisplay, hostViewport);
@@ -261,6 +285,27 @@ namespace GpgPatcher
             }
 
             return 2;
+        }
+
+        private static int AddAccount(PlayGamesInstallLayout layout)
+        {
+            var patchStatus = PatchStatusInspector.Inspect(layout);
+            if (!patchStatus.AddAccountDeepLinkPatched)
+            {
+                throw new FriendlyException(
+                    "The add-account deep-link hook is not installed. Run Patch first, then try Add Account again.");
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = GpgConstants.AddAccountProtocolUrl,
+                UseShellExecute = true,
+            });
+
+            Console.WriteLine("Add account");
+            Console.WriteLine("  launched: " + GpgConstants.AddAccountProtocolUrl);
+            Console.WriteLine("  expected result: Google Play Games should open the normal new-account sign-in flow.");
+            return 0;
         }
 
         private static int ForceViewport(bool allowOffscreen)
@@ -516,6 +561,8 @@ namespace GpgPatcher
             Console.WriteLine("    Back up files, apply the host-side IL patch, optionally force the phenotype override, and restart the Play Games service.");
             Console.WriteLine("  verify");
             Console.WriteLine("    Read the latest logs and confirm whether Whiteout Survival launched at " + GpgConstants.TargetResolutionLabel + ".");
+            Console.WriteLine("  add-account");
+            Console.WriteLine("    Open the patched Google Play Games add-account sign-in flow.");
             Console.WriteLine("  force-viewport");
             Console.WriteLine("    Resize the visible Whiteout Survival crosvm surface to " + GpgConstants.TargetResolutionLabel + ".");
             Console.WriteLine("    Add --allow-offscreen to force it even when the monitor is too small and the window will be cropped.");

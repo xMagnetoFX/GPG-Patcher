@@ -13,6 +13,7 @@ namespace GpgPatcher.Gui
         private ModernButton refreshButton;
         private ModernButton verifyButton;
         private ModernButton patchButton;
+        private ModernButton addAccountButton;
         private ModernButton restoreButton;
         private ToggleSwitch phenotypeFallbackToggle;
         private StatusChip patchStateChip;

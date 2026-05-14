@@ -24,6 +24,11 @@ namespace GpgPatcher.Gui
             await RunElevatedCommandAsync(arguments, "Applying patch");
         }
 
+        private async Task AddAccountAsync()
+        {
+            await RunCapturedCommandAsync("add-account", "Starting add-account flow");
+        }
+
         private async Task RestoreAsync()
         {
             await RunElevatedCommandAsync("restore", "Restoring original files");
@@ -124,6 +129,9 @@ namespace GpgPatcher.Gui
                 + "  •  launch " + FormatState(summary.LaunchSettingsHook)
                 + "  •  viewport " + FormatState(summary.MonitorDisplayHook)
                 + "  •  sharp " + FormatState(summary.SharpeningFilterHook);
+            patchCard.DetailText += "  |  accounts " + FormatState(summary.AccountLimitBypassHook)
+                + "  |  add " + FormatState(summary.AddAccountDeepLinkHook)
+                + "  |  hook " + FormatState(summary.HookDllCompatible);
             patchCard.ApplyTheme(palette, summary.IsPatched);
 
             backupCard.ValueText = summary.HasBackup ? "Available" : "Missing";
@@ -254,6 +262,7 @@ namespace GpgPatcher.Gui
             refreshButton.Enabled = !busy;
             verifyButton.Enabled = !busy;
             patchButton.Enabled = !busy;
+            addAccountButton.Enabled = !busy;
             restoreButton.Enabled = !busy;
             phenotypeFallbackToggle.Enabled = !busy;
             busyProgressBar.Visible = busy;
