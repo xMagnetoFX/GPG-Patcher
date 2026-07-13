@@ -17,6 +17,7 @@ namespace GpgPatcher.Gui
     {
         private bool isHovered;
         private bool isPressed;
+        private readonly Font fluentIconFont;
 
         public ModernButton()
         {
@@ -26,6 +27,7 @@ namespace GpgPatcher.Gui
             Size = new Size(124, 42);
             Cursor = Cursors.Hand;
             Font = SystemFonts.MessageBoxFont;
+            fluentIconFont = CreateFluentIconFont();
 
             SetStyle(
                 ControlStyles.AllPaintingInWmPaint
@@ -40,6 +42,8 @@ namespace GpgPatcher.Gui
         public ModernButtonTone Tone { get; set; }
 
         public ThemePalette Palette { get; set; }
+
+        public string IconGlyph { get; set; }
 
         protected override void OnMouseEnter(EventArgs e)
         {
@@ -98,19 +102,64 @@ namespace GpgPatcher.Gui
                 e.Graphics.DrawPath(borderPen, path);
             }
 
-            TextRenderer.DrawText(
-                e.Graphics,
-                Text,
-                Font,
-                bounds,
-                colors.Text,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            if (string.IsNullOrEmpty(IconGlyph))
+            {
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    Text,
+                    Font,
+                    bounds,
+                    colors.Text,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            }
+            else
+            {
+                var iconBounds = new Rectangle(14, 0, 24, Height - 1);
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    IconGlyph,
+                    fluentIconFont,
+                    iconBounds,
+                    colors.Text,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+
+                var textBounds = new Rectangle(44, 0, Math.Max(0, Width - 54), Height - 1);
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    Text,
+                    Font,
+                    textBounds,
+                    colors.Text,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+            }
 
             if (Focused)
             {
                 var focusBounds = Rectangle.Inflate(bounds, -4, -4);
                 ControlPaint.DrawFocusRectangle(e.Graphics, focusBounds, colors.Text, Color.Transparent);
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                fluentIconFont.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        private static Font CreateFluentIconFont()
+        {
+            var font = new Font("Segoe Fluent Icons", 12f, FontStyle.Regular, GraphicsUnit.Point);
+            if (string.Equals(font.Name, "Segoe Fluent Icons", StringComparison.OrdinalIgnoreCase))
+            {
+                return font;
+            }
+
+            font.Dispose();
+            return new Font("Segoe MDL2 Assets", 12f, FontStyle.Regular, GraphicsUnit.Point);
         }
 
         private ButtonColors ResolveColors(ThemePalette palette)

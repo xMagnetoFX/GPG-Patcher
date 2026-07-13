@@ -2,9 +2,13 @@ bin/
 obj/
 .vs/
 artifacts/
+tmp/
 
 *.user
 *.suo
 *.cache
 *.log
 *.tmp
+*.obj
+*.zip
+'+$log+'

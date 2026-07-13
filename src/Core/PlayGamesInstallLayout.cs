@@ -24,6 +24,7 @@ namespace GpgPatcher
             ServiceLibPath = Path.Combine(ServiceDirectory, "ServiceLib.dll");
             ServiceConfigPath = Path.Combine(ServiceDirectory, "Service.exe.config");
             HookTargetPath = Path.Combine(ServiceDirectory, GpgConstants.HookAssemblyFileName);
+            InstalledResolutionPath = Path.Combine(ServiceDirectory, ResolutionProfiles.InstalledFileName);
             LegacyHookTargetPath = Path.Combine(ServiceDirectory, GpgConstants.LegacyHookAssemblyFileName);
             ServiceLogPath = Path.Combine(LocalLogsDirectory, GpgConstants.ServiceLogFileName);
             AndroidSerialLogPath = Path.Combine(LocalLogsDirectory, GpgConstants.AndroidSerialLogFileName);
@@ -52,6 +53,8 @@ namespace GpgPatcher
         public string ServiceConfigPath { get; }
 
         public string HookTargetPath { get; }
+
+        public string InstalledResolutionPath { get; }
 
         public string LegacyHookTargetPath { get; }
 

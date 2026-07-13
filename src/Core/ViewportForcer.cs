@@ -28,7 +28,11 @@ namespace GpgPatcher
         private const uint GwChild = 5;
         private const uint SwpShowWindow = 0x0040;
 
-        public static ViewportForceResult ForceTargetViewport(TimeSpan duration, TimeSpan interval, bool allowOffscreen)
+        public static ViewportForceResult ForceTargetViewport(
+            TimeSpan duration,
+            TimeSpan interval,
+            bool allowOffscreen,
+            ResolutionProfile targetResolution)
         {
             var target = FindTargetWindow();
             if (target == null)
@@ -41,7 +45,7 @@ namespace GpgPatcher
 
             for (var i = 0; i < attempts; i++)
             {
-                ForceOnce(target.ParentWindowHandle, target.ChildWindowHandle, allowOffscreen);
+                ForceOnce(target.ParentWindowHandle, target.ChildWindowHandle, allowOffscreen, targetResolution);
                 Thread.Sleep(interval);
                 finalChildSize = GetClientSize(target.ChildWindowHandle);
             }
@@ -49,8 +53,8 @@ namespace GpgPatcher
             return new ViewportForceResult
             {
                 Success = finalChildSize != null
-                    && finalChildSize.Width == GpgConstants.TargetWidth
-                    && finalChildSize.Height == GpgConstants.TargetHeight,
+                    && finalChildSize.Width == targetResolution.Width
+                    && finalChildSize.Height == targetResolution.Height,
                 ProcessId = target.ProcessId,
                 WindowTitle = target.WindowTitle,
                 ParentWindowHandle = target.ParentWindowHandle,
@@ -60,7 +64,11 @@ namespace GpgPatcher
             };
         }
 
-        private static void ForceOnce(IntPtr parentWindowHandle, IntPtr childWindowHandle, bool allowOffscreen)
+        private static void ForceOnce(
+            IntPtr parentWindowHandle,
+            IntPtr childWindowHandle,
+            bool allowOffscreen,
+            ResolutionProfile targetResolution)
         {
             NativeRect parentRect;
             NativeRect childRect;
@@ -70,14 +78,14 @@ namespace GpgPatcher
             }
 
             var topChrome = Math.Max(0, childRect.Top - parentRect.Top);
-            var targetParentHeight = GpgConstants.TargetHeight + topChrome;
+            var targetParentHeight = targetResolution.Height + topChrome;
             var targetX = 0;
             var targetY = 0;
 
             var monitorBounds = GetMonitorBounds(parentWindowHandle);
             if (monitorBounds != null
-                && GpgConstants.TargetWidth <= monitorBounds.Width
-                && GpgConstants.TargetHeight <= monitorBounds.Height)
+                && targetResolution.Width <= monitorBounds.Width
+                && targetResolution.Height <= monitorBounds.Height)
             {
                 targetX = monitorBounds.Left;
                 targetY = monitorBounds.Top - topChrome;
@@ -85,7 +93,7 @@ namespace GpgPatcher
             else if (!allowOffscreen)
             {
                 throw new FriendlyException(
-                    "A " + GpgConstants.TargetResolutionLabel
+                    "A " + targetResolution.Value
                     + " viewport is larger than the current monitor bounds and would be cropped. The offscreen resize was not applied.");
             }
 
@@ -94,7 +102,7 @@ namespace GpgPatcher
                 IntPtr.Zero,
                 targetX,
                 targetY,
-                GpgConstants.TargetWidth,
+                targetResolution.Width,
                 targetParentHeight,
                 SwpShowWindow))
             {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Google.Hpe.Service.Util;
 using Google.Hpe.Service.V1;
 
@@ -8,9 +9,32 @@ namespace GpgPatcher.Hooks
     public static class DisplaySettingsHooks
     {
         public const string TargetPackageName = "com.gof.global";
-        public const int TargetWidth = 2160;
-        public const int TargetHeight = 3840;
         public const int AccountLimitBypassVisibleCount = 4;
+
+        private static readonly ResolutionProfile TargetProfile;
+
+        static DisplaySettingsHooks()
+        {
+            TargetProfile = ResolutionProfiles.ReadFileOrDefault(
+                Path.Combine(
+                    Path.GetDirectoryName(typeof(DisplaySettingsHooks).Assembly.Location) ?? string.Empty,
+                    ResolutionProfiles.InstalledFileName));
+        }
+
+        public static int TargetWidth
+        {
+            get { return TargetProfile.Width; }
+        }
+
+        public static int TargetHeight
+        {
+            get { return TargetProfile.Height; }
+        }
+
+        public static string TargetResolution
+        {
+            get { return TargetProfile.Value; }
+        }
 
         public static AndroidDisplay.AvailableSettings PatchAvailableSettings(
             AndroidDisplay.AvailableSettings settings,
@@ -64,6 +88,38 @@ namespace GpgPatcher.Hooks
             return PatchAndroidDisplaySettings(settings, request);
         }
 
+        public static void PatchAddGuestDisplayRequest(
+            AddGuestDisplayRequest request,
+            LaunchGamePcsRequest launchRequest)
+        {
+            if (request == null || !ShouldPatch(launchRequest))
+            {
+                return;
+            }
+
+            if (request.DisplaySettings == null)
+            {
+                request.DisplaySettings = new AndroidDisplaySettings();
+            }
+
+            PatchAndroidDisplaySettings(request.DisplaySettings, true);
+        }
+
+        public static void PatchShowWindowRequest(ShowWindowRequest request)
+        {
+            if (request == null || !ShouldPatch(request))
+            {
+                return;
+            }
+
+            request.GuestDisplaySize = CreateTargetSize();
+            request.DisplayRatio = KiwiVmState.Types.DisplayRatio.Portrait916;
+            if (request.VmWindowMode == WindowState.Types.Mode.Fullscreen)
+            {
+                request.VmWindowMode = WindowState.Types.Mode.Windowed;
+            }
+        }
+
         public static DisplaySize PatchMonitorDisplaySize(
             DisplaySize displaySize,
             LaunchGameRequest request)
@@ -103,6 +159,46 @@ namespace GpgPatcher.Hooks
                 default:
                     return false;
             }
+        }
+
+        private static bool ShouldPatch(LaunchGamePcsRequest request)
+        {
+            return request != null
+                && string.Equals(request.PackageName, TargetPackageName, StringComparison.Ordinal);
+        }
+
+        private static bool ShouldPatch(ShowWindowRequest request)
+        {
+            return request != null
+                && string.Equals(request.PackageName, TargetPackageName, StringComparison.Ordinal);
+        }
+
+        private static AndroidDisplaySettings PatchAndroidDisplaySettings(
+            AndroidDisplaySettings settings,
+            bool shouldPatch)
+        {
+            if (settings == null || !shouldPatch)
+            {
+                return settings;
+            }
+
+            var originalSelected = settings.DisplaySize == null ? null : Clone(settings.DisplaySize);
+            var originalMax = FindMax(settings.AvailableDisplaySizes);
+
+            AddIfMissing(settings.AvailableDisplaySizes);
+
+            var originalHeight = GetKnownHeight(originalSelected, originalMax);
+            var originalDensity = settings.DisplayDensity;
+
+            settings.DisplaySize = CreateTargetSize();
+            settings.SharpeningEnabled = true;
+
+            if (originalDensity > 0 && originalHeight > 0)
+            {
+                settings.DisplayDensity = ScaleDensity(originalDensity, originalHeight, TargetHeight);
+            }
+
+            return settings;
         }
 
         private static void AddIfMissing(IList<DisplaySize> sizes)

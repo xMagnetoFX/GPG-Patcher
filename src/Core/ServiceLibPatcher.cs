@@ -17,11 +17,17 @@ namespace GpgPatcher
 
         public bool RuntimeDisplaySettingsPatched { get; set; }
 
+        public bool VirtualGuestDisplayPatched { get; set; }
+
+        public bool ShowWindowRequestPatched { get; set; }
+
         public bool SharpeningFilterPatched { get; set; }
 
         public bool AccountLimitBypassPatched { get; set; }
 
         public bool AddAccountDeepLinkPatched { get; set; }
+
+        public bool ExactInstanceLaunchPatched { get; set; }
 
         public bool AlreadyPatched
         {
@@ -31,9 +37,12 @@ namespace GpgPatcher
                     && !LaunchSettingsPatched
                     && !MonitorDisplayPatched
                     && !RuntimeDisplaySettingsPatched
+                    && !VirtualGuestDisplayPatched
+                    && !ShowWindowRequestPatched
                     && !SharpeningFilterPatched
                     && !AccountLimitBypassPatched
-                    && !AddAccountDeepLinkPatched;
+                    && !AddAccountDeepLinkPatched
+                    && !ExactInstanceLaunchPatched;
             }
         }
     }
@@ -47,6 +56,15 @@ namespace GpgPatcher
             public MethodDef AccountsInfoUpdaterMoveNext { get; set; }
 
             public MethodDef GlobalStateSetOnboardedAccounts { get; set; }
+
+            public MethodDef GlobalStateOnboardedAccountCount { get; set; }
+        }
+
+        private sealed class ExactLaunchLocals
+        {
+            public Local Query { get; set; }
+
+            public Local LaunchRequest { get; set; }
         }
 
         public static ServiceLibPatchResult Patch(string serviceLibPath, string outputPath)
@@ -63,10 +81,13 @@ namespace GpgPatcher
                 var launchMethod = FindTargetMethod(serviceType, GpgConstants.LaunchSettingsMethodName);
                 var monitorDisplayMethod = FindMonitorDisplayMethod(serviceType, GpgConstants.MonitorDisplayMethodName);
                 var runtimeDisplayMethod = FindRuntimeDisplaySettingsMethod(serviceType, GpgConstants.RuntimeDisplaySettingsMethodName);
+                var virtualGuestDisplayMethod = FindVirtualGuestDisplayMoveNextMethod(module);
+                var showWindowRequestMethod = FindShowWindowRequestMethod(module);
                 var sharpeningGetter = FindSharpeningFilterGetter(module);
                 var sharpeningRequestMethod = FindSharpeningFilterRequestMethod(module);
                 var accountLimitMethods = FindAccountLimitBypassMethods(module);
                 var openDeepLinkMethod = FindOpenDeepLinkMethod(module);
+                var exactLaunchMethod = FindExactLaunchMethod(module);
 
                 var result = new ServiceLibPatchResult
                 {
@@ -82,12 +103,19 @@ namespace GpgPatcher
                         serviceType,
                         runtimeDisplayMethod,
                         GpgConstants.PatchRuntimeAndroidDisplaySettingsMethod),
+                    VirtualGuestDisplayPatched = PatchAddGuestDisplayRequest(
+                        module,
+                        virtualGuestDisplayMethod),
+                    ShowWindowRequestPatched = PatchShowWindowRequest(
+                        module,
+                        showWindowRequestMethod),
                     SharpeningFilterPatched = PatchSharpeningFilter(
                         module,
                         sharpeningGetter,
                         sharpeningRequestMethod),
                     AccountLimitBypassPatched = PatchAccountLimitBypass(module, accountLimitMethods),
                     AddAccountDeepLinkPatched = PatchAddAccountDeepLink(module, openDeepLinkMethod),
+                    ExactInstanceLaunchPatched = PatchExactInstanceLaunch(module, exactLaunchMethod),
                 };
 
                 var options = new ModuleWriterOptions(module)
@@ -169,6 +197,40 @@ namespace GpgPatcher
             return method;
         }
 
+        public static MethodDef FindVirtualGuestDisplayMoveNextMethod(ModuleDef module)
+        {
+            var methods = module.GetTypes()
+                .Where(type =>
+                    type.FullName.StartsWith(
+                        GpgConstants.EmulatorSurfaceScopeTypeName + "/<" + GpgConstants.WaitUntilDisplayAddedAsyncMethodName + ">d__",
+                        StringComparison.Ordinal))
+                .SelectMany(type => type.Methods)
+                .Where(candidate =>
+                    string.Equals(candidate.Name, GpgConstants.MoveNextMethodName, StringComparison.Ordinal)
+                    && candidate.Body != null)
+                .ToList();
+
+            foreach (var method in methods)
+            {
+                if (FindAddDisplayCall(method) != null && FindEnableDxgiFlipModelSetter(method) != null)
+                {
+                    return method;
+                }
+            }
+
+            throw new FriendlyException("Could not find WaitUntilDisplayAddedAsync display-add state machine in ServiceLib.dll.");
+        }
+
+        public static MethodDef FindShowWindowRequestMethod(ModuleDef module)
+        {
+            return FindMethod(
+                module,
+                GpgConstants.EmulatorSurfaceReadyControllerTypeName,
+                GpgConstants.ShowAsyncMethodName,
+                "System.Threading.Tasks.Task`1<System.Boolean>",
+                new[] { "Google.Hpe.Service.V1.ShowWindowRequest" });
+        }
+
         public static MethodDef FindSharpeningFilterGetter(ModuleDef module)
         {
             var type = module.Types.FirstOrDefault(candidate =>
@@ -232,6 +294,13 @@ namespace GpgPatcher
 
         public static AccountLimitBypassMethods FindAccountLimitBypassMethods(ModuleDef module)
         {
+            var legacyGlobalStateMutator = TryFindMethod(
+                module,
+                GpgConstants.GlobalStateAccountCountMutatorTypeName,
+                GpgConstants.GlobalStateSetOnboardedAccountsMethodName,
+                "System.Boolean",
+                new[] { "Google.Play.Games.Metrics.GlobalState" });
+
             return new AccountLimitBypassMethods
             {
                 LocalStateUpdateAccountsInfo = FindLocalStateUpdateAccountsInfoMethod(module),
@@ -241,12 +310,10 @@ namespace GpgPatcher
                     GpgConstants.MoveNextMethodName,
                     "System.Void",
                     new string[0]),
-                GlobalStateSetOnboardedAccounts = FindMethod(
-                    module,
-                    GpgConstants.GlobalStateAccountCountMutatorTypeName,
-                    GpgConstants.GlobalStateSetOnboardedAccountsMethodName,
-                    "System.Boolean",
-                    new[] { "Google.Play.Games.Metrics.GlobalState" }),
+                GlobalStateSetOnboardedAccounts = legacyGlobalStateMutator,
+                GlobalStateOnboardedAccountCount = legacyGlobalStateMutator == null
+                    ? FindGlobalStateOnboardedAccountCountMethod(module)
+                    : null,
             };
         }
 
@@ -255,7 +322,8 @@ namespace GpgPatcher
             return methods != null
                 && HasHookCall(methods.LocalStateUpdateAccountsInfo, GpgConstants.PatchOnboardedAccountCountMethod)
                 && HasHookCall(methods.AccountsInfoUpdaterMoveNext, GpgConstants.PatchOnboardedAccountCountMethod)
-                && HasHookCall(methods.GlobalStateSetOnboardedAccounts, GpgConstants.PatchOnboardedAccountCountMethod);
+                && (HasHookCall(methods.GlobalStateSetOnboardedAccounts, GpgConstants.PatchOnboardedAccountCountMethod)
+                    || HasHookCall(methods.GlobalStateOnboardedAccountCount, GpgConstants.PatchOnboardedAccountCountMethod));
         }
 
         public static MethodDef FindOpenDeepLinkMethod(ModuleDef module)
@@ -266,6 +334,53 @@ namespace GpgPatcher
                 GpgConstants.OpenDeepLinkMethodName,
                 "System.Threading.Tasks.Task",
                 new[] { "System.String" });
+        }
+
+        public static MethodDef FindExactLaunchMethod(ModuleDef module)
+        {
+            var method = FindMethod(
+                module,
+                GpgConstants.AppLauncherCommandHandlerTypeName,
+                GpgConstants.HandleCommandMethodName,
+                "Google.Hpe.Service.Launch.HandledLaunchArgsParts",
+                new[]
+                {
+                    "Google.Hpe.Service.Launch.LaunchArgs",
+                    "Google.Hpe.Service.Launch.HandledLaunchArgsParts",
+                    "Google.Hpe.Service.Launch.IStageManager",
+                });
+
+            FindExactLaunchLocals(method);
+            return method;
+        }
+
+        public static bool HasExactInstanceLaunch(MethodDef method)
+        {
+            if (method == null || method.Body == null)
+            {
+                return false;
+            }
+
+            var sawAidParameter = method.Body.Instructions.Any(instruction =>
+                instruction.OpCode == OpCodes.Ldstr
+                && string.Equals(
+                    instruction.Operand as string,
+                    GpgConstants.AndroidAppLibraryIdParameterName,
+                    StringComparison.Ordinal));
+            var sawLibraryIdSetter = method.Body.Instructions.Any(instruction =>
+            {
+                var operand = instruction.Operand as IMethod;
+                return (instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt)
+                    && operand != null
+                    && string.Equals(operand.Name, "set_AndroidAppLibraryId", StringComparison.Ordinal)
+                    && operand.DeclaringType != null
+                    && string.Equals(
+                        operand.DeclaringType.FullName,
+                        "Google.Hpe.Service.V1.LaunchGameRequest",
+                        StringComparison.Ordinal);
+            });
+
+            return sawAidParameter && sawLibraryIdSetter;
         }
 
         public static bool HasAddAccountDeepLink(MethodDef method)
@@ -527,6 +642,88 @@ namespace GpgPatcher
             return first != body.Instructions[0];
         }
 
+        private static bool PatchAddGuestDisplayRequest(ModuleDef module, MethodDef method)
+        {
+            if (HasHookCall(method, GpgConstants.PatchAddGuestDisplayRequestMethod))
+            {
+                return false;
+            }
+
+            var addDisplayCall = FindAddDisplayCall(method);
+            if (addDisplayCall == null)
+            {
+                throw new FriendlyException("Could not find AddDisplayAsync call in WaitUntilDisplayAddedAsync.");
+            }
+
+            var enableDxgiFlipModelSetter = FindEnableDxgiFlipModelSetter(method);
+            if (enableDxgiFlipModelSetter == null)
+            {
+                throw new FriendlyException("Could not find AddGuestDisplayRequest.EnableDxgiFlipModel setter in WaitUntilDisplayAddedAsync.");
+            }
+
+            var stateMachineThisField = method.DeclaringType.Fields.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, GpgConstants.StateMachineThisFieldName, StringComparison.Ordinal)
+                && candidate.FieldType.FullName == GpgConstants.EmulatorSurfaceScopeTypeName);
+            if (stateMachineThisField == null)
+            {
+                throw new FriendlyException("Could not find WaitUntilDisplayAddedAsync state-machine owner field.");
+            }
+
+            var surfaceScopeType = module.GetTypes().FirstOrDefault(type =>
+                string.Equals(type.FullName, GpgConstants.EmulatorSurfaceScopeTypeName, StringComparison.Ordinal));
+            if (surfaceScopeType == null)
+            {
+                throw new FriendlyException("Could not find EmulatorSurfaceScope in ServiceLib.dll.");
+            }
+
+            var launchRequestField = FindLaunchGamePcsRequestField(surfaceScopeType);
+            var calledMethod = addDisplayCall.Operand as IMethod;
+            var hookMethod = CreateHookMethodReference(
+                module,
+                GpgConstants.PatchAddGuestDisplayRequestMethod,
+                module.CorLibTypes.Void,
+                calledMethod.MethodSig.Params[1],
+                launchRequestField.FieldType);
+
+            var body = method.Body;
+            var index = body.Instructions.IndexOf(enableDxgiFlipModelSetter) + 1;
+            body.Instructions.Insert(index, Instruction.Create(OpCodes.Dup));
+            body.Instructions.Insert(index + 1, Instruction.Create(OpCodes.Ldarg_0));
+            body.Instructions.Insert(index + 2, Instruction.Create(OpCodes.Ldfld, stateMachineThisField));
+            body.Instructions.Insert(index + 3, Instruction.Create(OpCodes.Ldfld, launchRequestField));
+            body.Instructions.Insert(index + 4, Instruction.Create(OpCodes.Call, hookMethod));
+            body.MaxStack = (ushort)Math.Max((int)body.MaxStack, 8);
+            return true;
+        }
+
+        private static bool PatchShowWindowRequest(ModuleDef module, MethodDef method)
+        {
+            if (HasHookCall(method, GpgConstants.PatchShowWindowRequestMethod))
+            {
+                return false;
+            }
+
+            if (!method.HasThis
+                || method.MethodSig == null
+                || method.MethodSig.Params.Count != 1
+                || method.MethodSig.Params[0].FullName != "Google.Hpe.Service.V1.ShowWindowRequest")
+            {
+                throw new FriendlyException("Target method '" + method.Name + "' does not have the expected ShowWindowRequest signature.");
+            }
+
+            var hookMethod = CreateHookMethodReference(
+                module,
+                GpgConstants.PatchShowWindowRequestMethod,
+                module.CorLibTypes.Void,
+                method.MethodSig.Params[0]);
+
+            var body = method.Body;
+            body.Instructions.Insert(0, Instruction.Create(OpCodes.Ldarg_1));
+            body.Instructions.Insert(1, Instruction.Create(OpCodes.Call, hookMethod));
+            body.MaxStack = (ushort)Math.Max((int)body.MaxStack, 8);
+            return true;
+        }
+
         private static bool PatchSharpeningFilter(
             ModuleDef module,
             MethodDef sharpeningGetter,
@@ -579,11 +776,20 @@ namespace GpgPatcher
                 GpgConstants.AccountsInfoTypeName,
                 "set_OnboardedAccounts",
                 "set_NumOnboardedAccounts");
-            changed |= PatchOnboardedAccountCountSetter(
-                module,
-                methods.GlobalStateSetOnboardedAccounts,
-                GpgConstants.GlobalStateTypeName,
-                "set_OnboardedAccounts");
+            if (methods.GlobalStateSetOnboardedAccounts != null)
+            {
+                changed |= PatchOnboardedAccountCountSetter(
+                    module,
+                    methods.GlobalStateSetOnboardedAccounts,
+                    GpgConstants.GlobalStateTypeName,
+                    "set_OnboardedAccounts");
+            }
+            else
+            {
+                changed |= PatchOnboardedAccountCountReturnValue(
+                    module,
+                    methods.GlobalStateOnboardedAccountCount);
+            }
 
             return changed;
         }
@@ -620,6 +826,80 @@ namespace GpgPatcher
             body.Instructions.Insert(4, Instruction.Create(OpCodes.Ldarg_0));
             body.Instructions.Insert(5, Instruction.Create(OpCodes.Call, addAccountMethod));
             body.Instructions.Insert(6, Instruction.Create(OpCodes.Ret));
+            body.MaxStack = (ushort)Math.Max((int)body.MaxStack, 2);
+            return true;
+        }
+
+        private static bool PatchExactInstanceLaunch(ModuleDef module, MethodDef method)
+        {
+            if (HasExactInstanceLaunch(method))
+            {
+                return false;
+            }
+
+            var locals = FindExactLaunchLocals(method);
+            var body = method.Body;
+            var requestStore = body.Instructions.FirstOrDefault(instruction =>
+                IsStoreLocal(instruction, locals.LaunchRequest));
+            if (requestStore == null)
+            {
+                throw new FriendlyException(
+                    "Could not find the launch request construction point in the Play Games launch handler.");
+            }
+
+            var requestStoreIndex = body.Instructions.IndexOf(requestStore);
+            var insertionTarget = requestStoreIndex < 0 || requestStoreIndex + 1 >= body.Instructions.Count
+                ? null
+                : body.Instructions[requestStoreIndex + 1];
+            if (insertionTarget == null)
+            {
+                throw new FriendlyException("The Play Games launch handler ended unexpectedly.");
+            }
+
+            var getItem = method.Body.Instructions
+                .Select(instruction => instruction.Operand as IMethod)
+                .FirstOrDefault(candidate =>
+                    candidate != null
+                    && string.Equals(candidate.Name, "get_Item", StringComparison.Ordinal)
+                    && candidate.DeclaringType != null
+                    && string.Equals(
+                        candidate.DeclaringType.FullName,
+                        "System.Collections.Specialized.NameValueCollection",
+                        StringComparison.Ordinal));
+            if (getItem == null)
+            {
+                throw new FriendlyException(
+                    "Could not find query-string access in the Play Games launch handler.");
+            }
+
+            var libraryId = new Local(module.CorLibTypes.String);
+            body.Variables.Add(libraryId);
+            body.InitLocals = true;
+            var setter = new MemberRefUser(
+                module,
+                "set_AndroidAppLibraryId",
+                MethodSig.CreateInstance(module.CorLibTypes.Void, module.CorLibTypes.String),
+                locals.LaunchRequest.Type.ToTypeDefOrRef());
+
+            var injected = new[]
+            {
+                Instruction.Create(OpCodes.Ldloc, locals.Query),
+                Instruction.Create(OpCodes.Ldstr, GpgConstants.AndroidAppLibraryIdParameterName),
+                Instruction.Create(OpCodes.Callvirt, getItem),
+                Instruction.Create(OpCodes.Stloc, libraryId),
+                Instruction.Create(OpCodes.Ldloc, libraryId),
+                Instruction.Create(OpCodes.Brfalse_S, insertionTarget),
+                Instruction.Create(OpCodes.Ldloc, locals.LaunchRequest),
+                Instruction.Create(OpCodes.Ldloc, libraryId),
+                Instruction.Create(OpCodes.Callvirt, setter),
+            };
+
+            var insertionIndex = body.Instructions.IndexOf(insertionTarget);
+            for (var index = 0; index < injected.Length; index++)
+            {
+                body.Instructions.Insert(insertionIndex + index, injected[index]);
+            }
+
             body.MaxStack = (ushort)Math.Max((int)body.MaxStack, 2);
             return true;
         }
@@ -662,6 +942,42 @@ namespace GpgPatcher
                 "Could not find " + declaringTypeName + " account-count setter call in method '" + method.FullName + "'.");
         }
 
+        private static bool PatchOnboardedAccountCountReturnValue(ModuleDef module, MethodDef method)
+        {
+            if (HasHookCall(method, GpgConstants.PatchOnboardedAccountCountMethod))
+            {
+                return false;
+            }
+
+            if (method == null || method.Body == null || method.ReturnType.FullName != "System.Int32")
+            {
+                throw new FriendlyException("Target account-count selector does not have the expected Int32 return value.");
+            }
+
+            var hookMethod = CreateHookMethodReference(
+                module,
+                GpgConstants.PatchOnboardedAccountCountMethod,
+                module.CorLibTypes.Int32,
+                module.CorLibTypes.Int32);
+
+            var returns = method.Body.Instructions
+                .Where(instruction => instruction.OpCode == OpCodes.Ret)
+                .ToList();
+
+            if (returns.Count == 0)
+            {
+                throw new FriendlyException("Target account-count selector had no return instructions.");
+            }
+
+            foreach (var ret in returns)
+            {
+                method.Body.Instructions.Insert(method.Body.Instructions.IndexOf(ret), Instruction.Create(OpCodes.Call, hookMethod));
+            }
+
+            method.Body.MaxStack = (ushort)Math.Max((int)method.Body.MaxStack, 8);
+            return true;
+        }
+
         private static FieldDef FindLaunchGameRequestField(TypeDef serviceType)
         {
             var field = serviceType.Fields.FirstOrDefault(candidate =>
@@ -671,6 +987,20 @@ namespace GpgPatcher
             if (field == null)
             {
                 throw new FriendlyException("Could not find AppSessionScope launch request field.");
+            }
+
+            return field;
+        }
+
+        private static FieldDef FindLaunchGamePcsRequestField(TypeDef surfaceScopeType)
+        {
+            var field = surfaceScopeType.Fields.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, GpgConstants.LaunchGameRequestFieldName, StringComparison.Ordinal)
+                && candidate.FieldType.FullName == "Google.Hpe.Service.V1.LaunchGamePcsRequest");
+
+            if (field == null)
+            {
+                throw new FriendlyException("Could not find EmulatorSurfaceScope launch request field.");
             }
 
             return field;
@@ -710,6 +1040,113 @@ namespace GpgPatcher
             }
         }
 
+        private static MethodDef FindGlobalStateOnboardedAccountCountMethod(ModuleDef module)
+        {
+            var method = module.GetTypes()
+                .Where(type =>
+                    string.Equals(type.FullName, "Google.Hpe.Service.GlobalState.GlobalStateModule/<>c", StringComparison.Ordinal)
+                    || type.FullName.StartsWith("Google.Hpe.Service.GlobalState.GlobalStateModule/", StringComparison.Ordinal))
+                .SelectMany(type => type.Methods)
+                .FirstOrDefault(candidate =>
+                    candidate.Name.StartsWith("<" + GpgConstants.ObserveAccountsStateAsyncMethodName + ">b__", StringComparison.Ordinal)
+                    && candidate.MethodSig != null
+                    && candidate.ReturnType.FullName == "System.Int32"
+                    && candidate.MethodSig.Params.Count == 1
+                    && candidate.MethodSig.Params[0].FullName == GpgConstants.AccountsStateTypeName
+                    && candidate.Body != null
+                    && CallsAccountsStateGetter(candidate));
+
+            if (method == null)
+            {
+                throw new FriendlyException(
+                    "Could not find ObserveAccountsStateAsync onboarded-account count selector in ServiceLib.dll.");
+            }
+
+            return method;
+        }
+
+        private static bool CallsAccountsStateGetter(MethodDef method)
+        {
+            return method.Body.Instructions.Any(instruction =>
+            {
+                var operand = instruction.Operand as IMethod;
+                return (instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt)
+                    && operand != null
+                    && string.Equals(operand.Name, "get_Accounts", StringComparison.Ordinal)
+                    && operand.DeclaringType != null
+                    && string.Equals(operand.DeclaringType.FullName, GpgConstants.AccountsStateTypeName, StringComparison.Ordinal);
+            });
+        }
+
+        private static ExactLaunchLocals FindExactLaunchLocals(MethodDef method)
+        {
+            if (method == null || method.Body == null)
+            {
+                throw new FriendlyException("The Play Games launch handler has no IL body.");
+            }
+
+            var query = method.Body.Variables.FirstOrDefault(variable =>
+                variable.Type != null
+                && string.Equals(
+                    variable.Type.FullName,
+                    "System.Collections.Specialized.NameValueCollection",
+                    StringComparison.Ordinal));
+            var requestConstructor = method.Body.Instructions.FirstOrDefault(instruction =>
+            {
+                var operand = instruction.Operand as IMethod;
+                return instruction.OpCode == OpCodes.Newobj
+                    && operand != null
+                    && string.Equals(operand.Name, ".ctor", StringComparison.Ordinal)
+                    && operand.DeclaringType != null
+                    && string.Equals(
+                        operand.DeclaringType.FullName,
+                        "Google.Hpe.Service.V1.LaunchGameRequest",
+                        StringComparison.Ordinal);
+            });
+            var constructorIndex = requestConstructor == null
+                ? -1
+                : method.Body.Instructions.IndexOf(requestConstructor);
+            var launchRequest = constructorIndex < 0 || constructorIndex + 1 >= method.Body.Instructions.Count
+                ? null
+                : method.Body.Instructions[constructorIndex + 1].Operand as Local;
+            if (query == null || launchRequest == null)
+            {
+                throw new FriendlyException(
+                    "Could not find the query or launch-request state in the Play Games launch handler.");
+            }
+
+            return new ExactLaunchLocals
+            {
+                Query = query,
+                LaunchRequest = launchRequest,
+            };
+        }
+
+        private static bool IsStoreLocal(Instruction instruction, Local local)
+        {
+            return instruction != null
+                && local != null
+                && (instruction.OpCode == OpCodes.Stloc || instruction.OpCode == OpCodes.Stloc_S)
+                && ReferenceEquals(instruction.Operand, local);
+        }
+
+        private static MethodDef TryFindMethod(
+            ModuleDef module,
+            string typeName,
+            string methodName,
+            string returnTypeName,
+            IReadOnlyList<string> parameterTypeNames)
+        {
+            try
+            {
+                return FindMethod(module, typeName, methodName, returnTypeName, parameterTypeNames);
+            }
+            catch (FriendlyException)
+            {
+                return null;
+            }
+        }
+
         private static MethodDef FindMethod(
             ModuleDef module,
             string typeName,
@@ -745,6 +1182,43 @@ namespace GpgPatcher
             }
 
             return method;
+        }
+
+        private static Instruction FindAddDisplayCall(MethodDef method)
+        {
+            if (method == null || method.Body == null)
+            {
+                return null;
+            }
+
+            return method.Body.Instructions.FirstOrDefault(instruction =>
+            {
+                var operand = instruction.Operand as IMethod;
+                return instruction.OpCode == OpCodes.Callvirt
+                    && operand != null
+                    && string.Equals(operand.Name, "AddDisplayAsync", StringComparison.Ordinal)
+                    && operand.MethodSig != null
+                    && operand.MethodSig.Params.Count == 3
+                    && operand.MethodSig.Params[1].FullName == "Google.Hpe.Service.V1.AddGuestDisplayRequest";
+            });
+        }
+
+        private static Instruction FindEnableDxgiFlipModelSetter(MethodDef method)
+        {
+            if (method == null || method.Body == null)
+            {
+                return null;
+            }
+
+            return method.Body.Instructions.FirstOrDefault(instruction =>
+            {
+                var operand = instruction.Operand as IMethod;
+                return (instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt)
+                    && operand != null
+                    && string.Equals(operand.Name, "set_EnableDxgiFlipModel", StringComparison.Ordinal)
+                    && operand.DeclaringType != null
+                    && operand.DeclaringType.FullName == "Google.Hpe.Service.V1.AddGuestDisplayRequest";
+            });
         }
 
         private static MemberRef CreateHookMethodReference(ModuleDef module, MethodDef targetMethod, string hookMethodName)

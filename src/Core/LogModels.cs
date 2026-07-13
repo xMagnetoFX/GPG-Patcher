@@ -147,11 +147,17 @@ namespace GpgPatcher
 
         public bool RuntimeDisplaySettingsPatched { get; set; }
 
+        public bool VirtualGuestDisplayPatched { get; set; }
+
+        public bool ShowWindowRequestPatched { get; set; }
+
         public bool SharpeningFilterPatched { get; set; }
 
         public bool AccountLimitBypassPatched { get; set; }
 
         public bool AddAccountDeepLinkPatched { get; set; }
+
+        public bool ExactInstanceLaunchPatched { get; set; }
 
         public bool HookAssemblyReferencePresent { get; set; }
 
@@ -165,6 +171,8 @@ namespace GpgPatcher
 
         public string PhenotypeOverrideValue { get; set; }
 
+        public ResolutionProfile TargetResolution { get; set; }
+
         public bool IsPatched
         {
             get
@@ -173,9 +181,12 @@ namespace GpgPatcher
                     && LaunchSettingsPatched
                     && MonitorDisplayPatched
                     && RuntimeDisplaySettingsPatched
+                    && VirtualGuestDisplayPatched
+                    && ShowWindowRequestPatched
                     && SharpeningFilterPatched
                     && AccountLimitBypassPatched
                     && AddAccountDeepLinkPatched
+                    && ExactInstanceLaunchPatched
                     && HookAssemblyReferencePresent
                     && HookDllPresent
                     && HookDllCompatible;

@@ -6,104 +6,71 @@ namespace GpgPatcher.Gui
 {
     internal sealed partial class MainForm
     {
-        private Control CreateHeaderPanel()
+        private Control CreateHomeHeader()
         {
-            var headerPanel = new ModernSurfacePanel
+            var header = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Height = 176,
-                Margin = new Padding(0, 0, 0, 12),
-                Padding = new Padding(22, 18, 22, 18),
-                CornerRadius = 24,
-                FillColor = palette.SurfaceRaised,
-                BorderColor = palette.BorderStrong,
-            };
-
-            var headerLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
+                ColumnCount = 2,
                 RowCount = 1,
-                BackColor = headerPanel.FillColor,
+                BackColor = palette.WindowBackground,
+                Margin = new Padding(0),
             };
-            headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            headerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            headerPanel.Controls.Add(headerLayout);
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            var brandArtPanel = new BrandArtPanel
-            {
-                LogoImage = brandLogo,
-                BorderColor = palette.IsDark ? Color.FromArgb(76, 118, 178) : Color.FromArgb(99, 146, 229),
-                GradientStartColor = palette.IsDark ? Color.FromArgb(21, 72, 132) : Color.FromArgb(22, 104, 204),
-                GradientEndColor = palette.IsDark ? Color.FromArgb(33, 135, 161) : Color.FromArgb(42, 194, 214),
-                GlowColor = palette.IsDark ? Color.FromArgb(82, 255, 255, 255) : Color.FromArgb(112, 255, 255, 255),
-                OrbColor = palette.IsDark ? Color.FromArgb(70, 147, 197, 253) : Color.FromArgb(86, 191, 219, 254),
-                TextColor = Color.White,
-                Anchor = AnchorStyles.Left,
-            };
-            headerLayout.Controls.Add(brandArtPanel, 0, 0);
-
-            var heroTextPanel = new TableLayoutPanel
+            var heading = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 3,
-                Margin = new Padding(0, 6, 0, 0),
-                BackColor = headerPanel.FillColor,
+                BackColor = palette.WindowBackground,
+                Margin = new Padding(2, 0, 0, 10),
             };
-            heroTextPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            heroTextPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            heroTextPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            headerLayout.Controls.Add(heroTextPanel, 1, 0);
+            heading.RowStyles.Add(new RowStyle(SizeType.Absolute, 42f));
+            heading.RowStyles.Add(new RowStyle(SizeType.Absolute, 24f));
+            heading.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            heading.Controls.Add(CreatePageLabel("Overview", 22f, FontStyle.Bold, palette.TextPrimary), 0, 0);
+            heading.Controls.Add(CreatePageLabel(
+                "Monitor compatibility, manage the display profile, and validate the latest game launch.",
+                9.5f,
+                FontStyle.Regular,
+                palette.TextSecondary), 0, 1);
+            var patchNote = CreatePageLabel(
+                "PATCH NOTE  •  Changes apply after the Play Games service restarts",
+                8.5f,
+                FontStyle.Bold,
+                palette.Accent);
+            patchNote.Margin = new Padding(0, 2, 0, 0);
+            heading.Controls.Add(patchNote, 0, 2);
+            header.Controls.Add(heading, 0, 0);
 
-            var heroTitleLabel = new Label
+            var profileSummary = new TableLayoutPanel
             {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
                 AutoSize = true,
-                ForeColor = palette.TextPrimary,
-                Font = palette.CreateUiFont(21f, FontStyle.Bold),
-                Text = "GPG Patcher",
-                Margin = new Padding(0, 0, 0, 2),
+                BackColor = palette.WindowBackground,
+                Margin = new Padding(18, 10, 2, 22),
             };
-            heroTextPanel.Controls.Add(heroTitleLabel, 0, 0);
+            profileSummary.RowStyles.Add(new RowStyle(SizeType.Absolute, 22f));
+            profileSummary.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            var profileCaption = CreatePageLabel("ACTIVE PROFILE", 8f, FontStyle.Bold, palette.TextSecondary);
+            profileCaption.TextAlign = ContentAlignment.MiddleRight;
+            profileSummary.Controls.Add(profileCaption, 0, 0);
 
-            heroSubtitleLabel = new Label
-            {
-                AutoSize = true,
-                ForeColor = palette.TextSecondary,
-                Font = palette.CreateUiFont(10.5f, FontStyle.Regular),
-                Text = "Personal host-side patch manager for Whiteout Survival on Google Play Games for PC.",
-                Margin = new Padding(0, 0, 0, 6),
-            };
-            heroTextPanel.Controls.Add(heroSubtitleLabel, 0, 1);
+            homeTargetProfileChip = CreateChip();
+            homeTargetProfileChip.Text = "UHD  •  2160 × 3840";
+            homeTargetProfileChip.FillColor = palette.AccentSoft;
+            homeTargetProfileChip.BorderColor = palette.BorderStrong;
+            homeTargetProfileChip.TextColor = palette.IsDark ? palette.TextPrimary : palette.AccentPressed;
+            homeTargetProfileChip.Anchor = AnchorStyles.Right;
+            profileSummary.Controls.Add(homeTargetProfileChip, 0, 1);
+            header.Controls.Add(profileSummary, 1, 0);
 
-            heroMetaLabel = new Label
-            {
-                AutoSize = true,
-                ForeColor = palette.TextSecondary,
-                Font = palette.CreateUiFont(9.25f, FontStyle.Regular),
-                Text = "Target package: com.gof.global  •  UHD portrait target: " + GpgConstants.TargetResolutionLabel,
-            };
-            heroTextPanel.Controls.Add(heroMetaLabel, 0, 2);
-
-            var chipPanel = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-                BackColor = headerPanel.FillColor,
-                Anchor = AnchorStyles.Right,
-                WrapContents = false,
-                Margin = new Padding(12, 0, 0, 0),
-            };
-            headerLayout.Controls.Add(chipPanel, 2, 0);
-
-            patchStateChip = CreateChip();
-            compatibilityChip = CreateChip();
-            chipPanel.Controls.Add(patchStateChip);
-            chipPanel.Controls.Add(compatibilityChip);
-
-            return headerPanel;
+            return header;
         }
 
         private Control CreateActionPanel()
@@ -111,9 +78,9 @@ namespace GpgPatcher.Gui
             var actionPanel = new ModernSurfacePanel
             {
                 Dock = DockStyle.Fill,
-                Height = 104,
+                Height = 76,
                 Margin = new Padding(0, 0, 0, 12),
-                Padding = new Padding(18, 14, 18, 14),
+                Padding = new Padding(18, 12, 18, 12),
                 CornerRadius = 22,
                 FillColor = palette.Surface,
                 BorderColor = palette.Border,
@@ -125,74 +92,48 @@ namespace GpgPatcher.Gui
                 ColumnCount = 2,
                 RowCount = 1,
                 BackColor = actionPanel.FillColor,
+                Margin = new Padding(0),
             };
+            actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120f));
             actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             actionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             actionPanel.Controls.Add(actionLayout);
 
-            var buttonPanel = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                Dock = DockStyle.Fill,
-                WrapContents = true,
-                BackColor = actionPanel.FillColor,
-                Margin = new Padding(0),
-            };
-            actionLayout.Controls.Add(buttonPanel, 0, 0);
+            actionLayout.Controls.Add(CreatePageLabel("Quick actions", 10f, FontStyle.Bold, palette.TextPrimary), 0, 0);
+
+            var maintenanceRow = CreateButtonRow(actionPanel.FillColor, 0, 0, 0, 0);
+            maintenanceRow.Padding = new Padding(0, 5, 0, 0);
+            actionLayout.Controls.Add(maintenanceRow, 1, 0);
 
             patchButton = CreateButton("Patch", ModernButtonTone.Primary, async (sender, args) => await PatchAsync());
-            addAccountButton = CreateButton("Add Account", ModernButtonTone.Secondary, async (sender, args) => await AddAccountAsync());
             refreshButton = CreateButton("Refresh", ModernButtonTone.Secondary, async (sender, args) => await RefreshInspectAsync());
             verifyButton = CreateButton("Verify", ModernButtonTone.Secondary, async (sender, args) => await VerifyAsync());
+            diagnoseViewportButton = CreateButton("Diagnose", ModernButtonTone.Secondary, async (sender, args) => await DiagnoseViewportAsync());
             restoreButton = CreateButton("Restore", ModernButtonTone.Danger, async (sender, args) => await RestoreAsync());
 
-            buttonPanel.Controls.Add(patchButton);
-            buttonPanel.Controls.Add(addAccountButton);
-            buttonPanel.Controls.Add(refreshButton);
-            buttonPanel.Controls.Add(verifyButton);
-            buttonPanel.Controls.Add(restoreButton);
+            patchButton.IconGlyph = "\uE898";
+            refreshButton.IconGlyph = "\uE72C";
+            verifyButton.IconGlyph = "\uE73E";
+            diagnoseViewportButton.IconGlyph = "\uE9D9";
+            restoreButton.IconGlyph = "\uE777";
 
-            var togglePanel = new TableLayoutPanel
-            {
-                AutoSize = true,
-                ColumnCount = 2,
-                RowCount = 2,
-                BackColor = actionPanel.FillColor,
-                Dock = DockStyle.Right,
-                Margin = new Padding(18, 0, 0, 0),
-            };
-            togglePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            togglePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            actionLayout.Controls.Add(togglePanel, 1, 0);
+            SetButtonWidth(patchButton, 124);
+            SetButtonWidth(refreshButton, 136);
+            SetButtonWidth(verifyButton, 112);
+            SetButtonWidth(diagnoseViewportButton, 148);
+            SetButtonWidth(restoreButton, 124);
 
-            phenotypeFallbackToggle = new ToggleSwitch
-            {
-                Palette = palette,
-                Margin = new Padding(0, 2, 10, 0),
-            };
-            togglePanel.Controls.Add(phenotypeFallbackToggle, 0, 0);
-            togglePanel.SetRowSpan(phenotypeFallbackToggle, 2);
+            patchButton.Margin = new Padding(0, 0, 12, 0);
+            refreshButton.Margin = new Padding(0, 0, 12, 0);
+            verifyButton.Margin = new Padding(0, 0, 12, 0);
+            diagnoseViewportButton.Margin = new Padding(0, 0, 12, 0);
+            restoreButton.Margin = new Padding(0);
 
-            var toggleTitleLabel = new Label
-            {
-                AutoSize = true,
-                Text = "Phenotype fallback",
-                ForeColor = palette.TextPrimary,
-                Font = palette.CreateUiFont(9.5f, FontStyle.Bold),
-                Margin = new Padding(0, 0, 0, 2),
-            };
-            togglePanel.Controls.Add(toggleTitleLabel, 1, 0);
-
-            var toggleHintLabel = new Label
-            {
-                AutoSize = true,
-                Text = "Only use this if the normal host patch stops exposing the UHD mode.",
-                ForeColor = palette.TextSecondary,
-                Font = palette.CreateUiFont(8.75f, FontStyle.Regular),
-                MaximumSize = new Size(340, 0),
-            };
-            togglePanel.Controls.Add(toggleHintLabel, 1, 1);
+            maintenanceRow.Controls.Add(patchButton);
+            maintenanceRow.Controls.Add(refreshButton);
+            maintenanceRow.Controls.Add(verifyButton);
+            maintenanceRow.Controls.Add(diagnoseViewportButton);
+            maintenanceRow.Controls.Add(restoreButton);
 
             return actionPanel;
         }
@@ -201,20 +142,20 @@ namespace GpgPatcher.Gui
         {
             var metricsGrid = new TableLayoutPanel
             {
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Top,
+                AutoSize = false,
+                Height = 230,
                 ColumnCount = 4,
                 RowCount = 2,
-                Margin = new Padding(0, 0, 0, 22),
+                Margin = new Padding(0, 0, 0, 16),
                 BackColor = palette.WindowBackground,
             };
             metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
             metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
             metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
             metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
-            metricsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 114f));
-            metricsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 114f));
+            metricsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 115f));
+            metricsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 115f));
 
             versionCard = CreateMetricCard("Version");
             compatibilityCard = CreateMetricCard("Compatibility");
@@ -223,7 +164,7 @@ namespace GpgPatcher.Gui
             launchSizeCard = CreateMetricCard("Launch Size");
             densityCard = CreateMetricCard("Density");
             guestDisplayCard = CreateMetricCard("Guest Display");
-            resolutionCapCard = CreateMetricCard("Resolution Cap");
+            targetResolutionCard = CreateMetricCard("Target Resolution");
 
             AddCard(metricsGrid, versionCard, 0, 0);
             AddCard(metricsGrid, compatibilityCard, 1, 0);
@@ -232,7 +173,7 @@ namespace GpgPatcher.Gui
             AddCard(metricsGrid, launchSizeCard, 0, 1);
             AddCard(metricsGrid, densityCard, 1, 1);
             AddCard(metricsGrid, guestDisplayCard, 2, 1);
-            AddCard(metricsGrid, resolutionCapCard, 3, 1);
+            AddCard(metricsGrid, targetResolutionCard, 3, 1);
 
             return metricsGrid;
         }
@@ -279,18 +220,19 @@ namespace GpgPatcher.Gui
                 Dock = DockStyle.Fill,
                 ForeColor = palette.TextPrimary,
                 Font = palette.CreateUiFont(11f, FontStyle.Bold),
-                Text = "Command Output",
+                Text = "Activity log",
                 TextAlign = ContentAlignment.MiddleLeft,
             };
             outputHeaderPanel.Controls.Add(outputCaptionLabel, 0, 0);
 
             var outputHintLabel = new Label
             {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Dock = DockStyle.None,
+                Anchor = AnchorStyles.Right,
                 ForeColor = palette.TextSecondary,
                 Font = palette.CreateUiFont(8.75f, FontStyle.Regular),
-                Text = "Live transcript from the latest maintenance command",
+                Text = "Latest maintenance transcript",
                 TextAlign = ContentAlignment.MiddleRight,
             };
             outputHeaderPanel.Controls.Add(outputHintLabel, 1, 0);
@@ -389,11 +331,27 @@ namespace GpgPatcher.Gui
                 Tone = tone,
                 Palette = palette,
                 CornerRadius = 14,
-                Margin = new Padding(0, 0, 10, 0),
+                Margin = new Padding(0, 0, 8, 0),
                 Font = palette.CreateUiFont(9.5f, FontStyle.Bold),
             };
             button.Click += onClick;
             return button;
+        }
+
+        private static FlowLayoutPanel CreateButtonRow(Color backColor, int left, int top, int right, int bottom)
+        {
+            return new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                WrapContents = false,
+                BackColor = backColor,
+                Margin = new Padding(left, top, right, bottom),
+            };
+        }
+
+        private static void SetButtonWidth(Control button, int width)
+        {
+            button.Width = width;
         }
 
         private MetricCard CreateMetricCard(string title)
@@ -408,7 +366,7 @@ namespace GpgPatcher.Gui
 
         private static void AddCard(TableLayoutPanel grid, Control control, int column, int row)
         {
-            control.Margin = new Padding(column == 0 ? 0 : 6, row == 0 ? 0 : 6, column == 3 ? 0 : 6, row == 1 ? 0 : 6);
+            control.Margin = new Padding(column == 0 ? 0 : 8, row == 0 ? 0 : 8, column == 3 ? 0 : 8, row == 1 ? 0 : 8);
             grid.Controls.Add(control, column, row);
         }
     }

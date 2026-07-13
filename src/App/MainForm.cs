@@ -8,19 +8,38 @@ namespace GpgPatcher.Gui
     {
         private readonly ThemePalette palette;
         private readonly PatcherProcessRunner runner;
+        private readonly PlayGamesAccountRepository accountRepository;
         private readonly Image brandLogo;
         private readonly Icon appIcon;
+        private Panel pageHost;
+        private Control homePage;
+        private Control instancesPage;
+        private Control settingsPage;
+        private ModernButton homeNavigationButton;
+        private ModernButton instancesNavigationButton;
+        private ModernButton settingsNavigationButton;
         private ModernButton refreshButton;
         private ModernButton verifyButton;
+        private ModernButton diagnoseViewportButton;
         private ModernButton patchButton;
         private ModernButton addAccountButton;
+        private ModernButton refreshAccountsButton;
+        private FlowLayoutPanel accountsFlowPanel;
+        private StatusChip accountCountChip;
+        private Label accountsStateLabel;
+        private bool exactInstanceLaunchReady;
+        private bool accountsRefreshInProgress;
         private ModernButton restoreButton;
+        private ModernButton[] resolutionProfileButtons;
         private ToggleSwitch phenotypeFallbackToggle;
-        private StatusChip patchStateChip;
-        private StatusChip compatibilityChip;
+        private Label phenotypeFallbackStateLabel;
+        private Label phenotypeFallbackNoteLabel;
+        private Label appliedResolutionLabel;
+        private Label resolutionApplyMessageLabel;
+        private StatusChip homeTargetProfileChip;
+        private ResolutionProfile selectedResolutionProfile;
+        private ResolutionProfile appliedResolutionProfile;
         private StatusChip statusChip;
-        private Label heroMetaLabel;
-        private Label heroSubtitleLabel;
         private Label outputCaptionLabel;
         private Label statusDetailLabel;
         private MetricCard versionCard;
@@ -30,7 +49,7 @@ namespace GpgPatcher.Gui
         private MetricCard launchSizeCard;
         private MetricCard densityCard;
         private MetricCard guestDisplayCard;
-        private MetricCard resolutionCapCard;
+        private MetricCard targetResolutionCard;
         private RichTextBox outputTextBox;
         private ProgressBar busyProgressBar;
 
@@ -38,6 +57,9 @@ namespace GpgPatcher.Gui
         {
             palette = ThemePalette.Detect();
             runner = new PatcherProcessRunner();
+            accountRepository = new PlayGamesAccountRepository();
+            selectedResolutionProfile = ResolutionProfileStorage.ReadSelected();
+            appliedResolutionProfile = ResolutionProfiles.Default;
             brandLogo = BrandingAssets.TryLoadLogoImage();
             appIcon = BrandingAssets.TryLoadApplicationIcon();
 
@@ -51,10 +73,14 @@ namespace GpgPatcher.Gui
             BackColor = palette.WindowBackground;
             ForeColor = palette.TextPrimary;
             Font = palette.CreateUiFont(9.5f, FontStyle.Regular);
-            MinimumSize = new Size(1180, 850);
-            Size = new Size(1280, 900);
+            MinimumSize = new Size(1120, 780);
+            var workingArea = Screen.PrimaryScreen.WorkingArea;
+            Size = new Size(
+                Math.Max(MinimumSize.Width, Math.Min(1280, workingArea.Width)),
+                Math.Max(MinimumSize.Height, Math.Min(960, workingArea.Height)));
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "GPG Patcher";
+            Text = string.Empty;
+            ShowIcon = false;
             if (appIcon != null)
             {
                 Icon = appIcon;
@@ -63,25 +89,20 @@ namespace GpgPatcher.Gui
             var root = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 5,
-                Padding = new Padding(20),
+                ColumnCount = 2,
+                RowCount = 1,
                 BackColor = palette.WindowBackground,
             };
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 224f));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38f));
             Controls.Add(root);
 
-            root.Controls.Add(CreateHeaderPanel(), 0, 0);
-            root.Controls.Add(CreateActionPanel(), 0, 1);
-            root.Controls.Add(CreateMetricsGrid(), 0, 2);
-            root.Controls.Add(CreateOutputPanel(), 0, 3);
-            root.Controls.Add(CreateFooterPanel(), 0, 4);
+            root.Controls.Add(CreateNavigationPanel(), 0, 0);
+            root.Controls.Add(CreatePageHost(), 1, 0);
 
             ApplyInitialChrome();
+            NavigateTo(AppPage.Home);
             Shown += async (sender, args) => await RefreshInspectAsync();
         }
 
@@ -106,8 +127,6 @@ namespace GpgPatcher.Gui
         private void ApplyInitialChrome()
         {
             UpdateStatusPresentation("Ready", palette.AccentSoft, palette.BorderStrong, palette.TextPrimary, "Refresh the current patch state or run Verify after launching the game.");
-            UpdatePatchStatePresentation(false);
-            UpdateCompatibilityPresentation(null);
         }
     }
 }

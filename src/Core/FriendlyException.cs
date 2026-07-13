@@ -8,5 +8,10 @@ namespace GpgPatcher
             : base(message)
         {
         }
+
+        public FriendlyException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 }

@@ -28,6 +28,8 @@ namespace GpgPatcher.Gui
 
         public string ResolutionCap { get; set; }
 
+        public string TargetResolution { get; set; }
+
         public string AvailableSettingsHook { get; set; }
 
         public string LaunchSettingsHook { get; set; }
@@ -36,11 +38,22 @@ namespace GpgPatcher.Gui
 
         public string RuntimeDisplayHook { get; set; }
 
+        public string VirtualGuestDisplayHook { get; set; }
+
+        public string ShowWindowRequestHook { get; set; }
+
         public string SharpeningFilterHook { get; set; }
 
         public string AccountLimitBypassHook { get; set; }
 
         public string AddAccountDeepLinkHook { get; set; }
+
+        public string ExactInstanceLaunchHook { get; set; }
+
+        public bool HasExactInstanceLaunch
+        {
+            get { return IsTruthy(ExactInstanceLaunchHook); }
+        }
 
         public string PhenotypeOverridePresent { get; set; }
 
@@ -59,9 +72,12 @@ namespace GpgPatcher.Gui
                     && IsTruthy(LaunchSettingsHook)
                     && IsTruthy(MonitorDisplayHook)
                     && IsTruthy(RuntimeDisplayHook)
+                    && IsTruthy(VirtualGuestDisplayHook)
+                    && IsTruthy(ShowWindowRequestHook)
                     && IsTruthy(SharpeningFilterHook)
                     && IsTruthy(AccountLimitBypassHook)
                     && IsTruthy(AddAccountDeepLinkHook)
+                    && IsTruthy(ExactInstanceLaunchHook)
                     && IsTruthy(HookDllCompatible);
             }
         }
@@ -102,9 +118,12 @@ namespace GpgPatcher.Gui
                 ReadValue(line, "launch-settings hook:", value => summary.LaunchSettingsHook = value);
                 ReadValue(line, "monitor-display hook:", value => summary.MonitorDisplayHook = value);
                 ReadValue(line, "runtime-display hook:", value => summary.RuntimeDisplayHook = value);
+                ReadValue(line, "virtual guest-display hook:", value => summary.VirtualGuestDisplayHook = value);
+                ReadValue(line, "show-window request hook:", value => summary.ShowWindowRequestHook = value);
                 ReadValue(line, "sharpening-filter hook:", value => summary.SharpeningFilterHook = value);
                 ReadValue(line, "account-limit bypass hook:", value => summary.AccountLimitBypassHook = value);
                 ReadValue(line, "add-account deep-link hook:", value => summary.AddAccountDeepLinkHook = value);
+                ReadValue(line, "exact-instance launch hook:", value => summary.ExactInstanceLaunchHook = value);
                 ReadValue(line, "hook dll present:", value => summary.HookDllPresent = value);
                 ReadValue(line, "hook dll compatible:", value => summary.HookDllCompatible = value);
                 ReadValue(line, "backup present:", value => summary.BackupPresent = value);
@@ -113,6 +132,7 @@ namespace GpgPatcher.Gui
                 ReadValue(line, "display size:", value => summary.DisplaySize = value);
                 ReadValue(line, "android serial display:", value => summary.GuestDisplay = value);
                 ReadValue(line, "resolution cap:", value => summary.ResolutionCap = value);
+                ReadValue(line, "target resolution:", value => summary.TargetResolution = value);
             }
 
             return summary;

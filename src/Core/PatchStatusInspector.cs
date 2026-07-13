@@ -27,6 +27,7 @@ namespace GpgPatcher
             var patchStatus = new PatchStatus
             {
                 InstalledVersion = GetInstalledVersion(layout.ServiceExePath),
+                TargetResolution = ResolutionProfileStorage.ReadApplied(layout),
                 HookDllPresent = File.Exists(layout.HookTargetPath) || File.Exists(layout.LegacyHookTargetPath),
                 HookDllCompatible = HasCurrentHookAssembly(layout.HookTargetPath),
                 BackupPresent = layout.HasCurrentBackup || layout.HasLegacyBackup,
@@ -43,10 +44,13 @@ namespace GpgPatcher
                     var launchMethod = ServiceLibPatcher.FindTargetMethod(serviceType, GpgConstants.LaunchSettingsMethodName);
                     var monitorDisplayMethod = ServiceLibPatcher.FindMonitorDisplayMethod(serviceType, GpgConstants.MonitorDisplayMethodName);
                     var runtimeDisplayMethod = ServiceLibPatcher.FindRuntimeDisplaySettingsMethod(serviceType, GpgConstants.RuntimeDisplaySettingsMethodName);
+                    var virtualGuestDisplayMethod = ServiceLibPatcher.FindVirtualGuestDisplayMoveNextMethod(module);
+                    var showWindowRequestMethod = ServiceLibPatcher.FindShowWindowRequestMethod(module);
                     var sharpeningGetter = ServiceLibPatcher.FindSharpeningFilterGetter(module);
                     var sharpeningRequestMethod = ServiceLibPatcher.FindSharpeningFilterRequestMethod(module);
                     var accountLimitMethods = ServiceLibPatcher.FindAccountLimitBypassMethods(module);
                     var openDeepLinkMethod = ServiceLibPatcher.FindOpenDeepLinkMethod(module);
+                    var exactLaunchMethod = ServiceLibPatcher.FindExactLaunchMethod(module);
 
                     patchStatus.AvailableSettingsPatched = ServiceLibPatcher.HasAnyHookCall(
                         availableMethod,
@@ -60,6 +64,12 @@ namespace GpgPatcher
                     patchStatus.RuntimeDisplaySettingsPatched = ServiceLibPatcher.HasHookCall(
                         runtimeDisplayMethod,
                         GpgConstants.PatchRuntimeAndroidDisplaySettingsMethod);
+                    patchStatus.VirtualGuestDisplayPatched = ServiceLibPatcher.HasHookCall(
+                        virtualGuestDisplayMethod,
+                        GpgConstants.PatchAddGuestDisplayRequestMethod);
+                    patchStatus.ShowWindowRequestPatched = ServiceLibPatcher.HasHookCall(
+                        showWindowRequestMethod,
+                        GpgConstants.PatchShowWindowRequestMethod);
                     patchStatus.SharpeningFilterPatched =
                         ServiceLibPatcher.IsConstantTrueMethod(sharpeningGetter)
                         && ServiceLibPatcher.HasForcedSharpeningFilterRequest(sharpeningRequestMethod);
@@ -67,6 +77,8 @@ namespace GpgPatcher
                         ServiceLibPatcher.HasAccountLimitBypass(accountLimitMethods);
                     patchStatus.AddAccountDeepLinkPatched =
                         ServiceLibPatcher.HasAddAccountDeepLink(openDeepLinkMethod);
+                    patchStatus.ExactInstanceLaunchPatched =
+                        ServiceLibPatcher.HasExactInstanceLaunch(exactLaunchMethod);
                 }
 
                 patchStatus.HookAssemblyReferencePresent = module.GetAssemblyRefs()
@@ -159,6 +171,19 @@ namespace GpgPatcher
 
             try
             {
+                ServiceLibPatcher.FindVirtualGuestDisplayMoveNextMethod(module);
+                ServiceLibPatcher.FindShowWindowRequestMethod(module);
+            }
+            catch (FriendlyException ex)
+            {
+                patchStatus.IsCompatible = false;
+                patchStatus.CompatibilityState = "VirtualViewportIncompatible";
+                patchStatus.CompatibilityMessage = ex.Message;
+                return;
+            }
+
+            try
+            {
                 ServiceLibPatcher.FindAccountLimitBypassMethods(module);
             }
             catch (FriendlyException ex)
@@ -177,6 +202,18 @@ namespace GpgPatcher
             {
                 patchStatus.IsCompatible = false;
                 patchStatus.CompatibilityState = "AddAccountDeepLinkIncompatible";
+                patchStatus.CompatibilityMessage = ex.Message;
+                return;
+            }
+
+            try
+            {
+                ServiceLibPatcher.FindExactLaunchMethod(module);
+            }
+            catch (FriendlyException ex)
+            {
+                patchStatus.IsCompatible = false;
+                patchStatus.CompatibilityState = "ExactInstanceLaunchIncompatible";
                 patchStatus.CompatibilityMessage = ex.Message;
                 return;
             }
@@ -217,6 +254,8 @@ namespace GpgPatcher
                         && HasMethod(hookType, GpgConstants.PatchAndroidDisplaySettingsMethod)
                         && HasMethod(hookType, GpgConstants.PatchMonitorDisplaySizeMethod)
                         && HasMethod(hookType, GpgConstants.PatchRuntimeAndroidDisplaySettingsMethod)
+                        && HasMethod(hookType, GpgConstants.PatchAddGuestDisplayRequestMethod)
+                        && HasMethod(hookType, GpgConstants.PatchShowWindowRequestMethod)
                         && HasMethod(hookType, GpgConstants.PatchOnboardedAccountCountMethod);
                 }
             }
